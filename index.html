@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Joke Harm Annotation Tool</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+
+<div id="setup-screen" class="screen">
+  <div class="card">
+    <h1>Joke Harm Annotation</h1>
+    <label for="annotator-name">Your name / ID</label>
+    <input type="text" id="annotator-name" placeholder="e.g. ahmed">
+
+    <label for="language-select">Dataset</label>
+    <select id="language-select">
+      <option value="english">English jokes</option>
+      <option value="arabic">Arabic jokes</option>
+    </select>
+
+    <button id="start-btn">Start / Resume</button>
+    <p class="hint">Your progress is saved in this browser and resumes automatically next time you enter the same name.</p>
+  </div>
+</div>
+
+<div id="annotation-screen" class="screen hidden">
+  <header>
+    <div id="progress-text">0 / 0 annotated</div>
+    <div class="progress-bar"><div id="progress-fill"></div></div>
+    <button id="switch-btn">Switch annotator/dataset</button>
+  </header>
+
+  <main>
+    <div id="joke-text" class="joke-box"></div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Label</label>
+        <select id="f-label">
+          <option value="">-- select --</option>
+          <option value="safe">Safe</option>
+          <option value="harmful">Harmful</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Explicitness</label>
+        <select id="f-explicitness">
+          <option value="">-- select --</option>
+          <option value="none">None</option>
+          <option value="explicit">Explicit</option>
+          <option value="implicit">Implicit</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Harm category</label>
+        <select id="f-harm-category">
+          <option value="">-- select --</option>
+          <option value="racism_ethnicity_nationality">Racism / ethnicity / nationality</option>
+          <option value="religion">Religion</option>
+          <option value="gender_sexism">Gender / sexism</option>
+          <option value="sexual_content_harassment">Sexual content / sexual harassment</option>
+          <option value="disability_illness">Disability / illness</option>
+          <option value="body_shaming_appearance">Body-shaming / appearance</option>
+          <option value="violence_death_trauma">Violence / death / trauma</option>
+          <option value="self_harm">Self-harm</option>
+          <option value="class_poverty">Class / poverty</option>
+          <option value="age">Age</option>
+          <option value="political_identity">Political identity</option>
+          <option value="other_unclear">Other / unclear</option>
+          <option value="n_a">N/A (safe)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Harm culture</label>
+        <select id="f-harm-culture">
+          <option value="">-- select --</option>
+          <option value="arabic">Arabic</option>
+          <option value="english">English</option>
+          <option value="universal">Universal</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Severity</label>
+        <select id="f-severity">
+          <option value="">-- select --</option>
+          <option value="n_a">N/A (safe)</option>
+          <option value="mild">Mild</option>
+          <option value="moderate">Moderate</option>
+          <option value="severe">Severe</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Target</label>
+        <select id="f-target">
+          <option value="">-- select --</option>
+          <option value="none">No target</option>
+          <option value="individual">Individual</option>
+          <option value="protected_group">Protected group</option>
+          <option value="institution">Institution</option>
+          <option value="behavior">Behavior</option>
+          <option value="event">Event</option>
+          <option value="self">Self</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Humor mechanism</label>
+        <select id="f-humor-mechanism">
+          <option value="">-- select --</option>
+          <option value="pun">Pun</option>
+          <option value="irony">Irony</option>
+          <option value="exaggeration">Exaggeration</option>
+          <option value="incongruity">Incongruity</option>
+          <option value="sarcasm">Sarcasm</option>
+          <option value="slapstick">Slapstick</option>
+          <option value="dark_twist">Dark twist</option>
+          <option value="stereotype_based_humor">Stereotype-based humor</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Annotator confidence</label>
+        <select id="f-confidence">
+          <option value="">-- select --</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+
+      <div class="field wide">
+        <label>Joke summary (one sentence: what is the joke?)</label>
+        <input type="text" id="f-joke-summary" placeholder="e.g. A husband deflects his wife's hypothetical question with a backhanded compliment.">
+      </div>
+
+      <div class="field wide">
+        <label>Why harmful / safe (one sentence)</label>
+        <input type="text" id="f-why" placeholder="e.g. Relies on a mother-in-law stereotype to imply she's unwanted.">
+      </div>
+    </div>
+
+    <div class="nav-row">
+      <button id="prev-btn">&larr; Previous</button>
+      <span id="index-text"></span>
+      <button id="next-btn">Next &rarr;</button>
+    </div>
+  </main>
+
+  <footer>
+    <button id="export-btn">Export my annotations (JSON)</button>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
