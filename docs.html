@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annotation Schema Documentation</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  #docs-main { max-width: 900px; margin: 0 auto; padding: 24px 20px 60px; }
+  .docs-title {
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+    font-size: 16px; font-weight: 600;
+  }
+
+  .field-block {
+    position: relative;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 16px;
+    display: grid; grid-template-columns: 1fr 1fr;
+    column-gap: 24px; row-gap: 6px;
+  }
+  /* continuous vertical divider between the English and Arabic columns */
+  .field-block::after {
+    content: ""; position: absolute; top: 12px; bottom: 12px; left: 50%;
+    width: 1px; background: var(--border);
+  }
+
+  .col-ar { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; }
+
+  .field-block h2 { margin: 0 0 2px; font-size: 16px; grid-row: 1; }
+  .field-block .field-desc { color: var(--muted); font-size: 13px; margin: 0 0 4px; grid-row: 2; }
+  .field-block .opt { font-size: 13.5px; padding: 3px 0; border-top: 1px solid var(--border); }
+  .field-block .opt:nth-of-type(-n+2) { border-top: none; }
+  .option-name { font-weight: 600; }
+  .option-desc { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="docs-title">
+  Annotation Schema Documentation &nbsp;/&nbsp; <span class="col-ar">توثيق مخطط التصنيف</span>
+</div>
+
+<main id="docs-main">
+
+  <div class="field-block">
+    <h2 class="col-en">Label</h2><h2 class="col-ar" dir="rtl">التصنيف</h2>
+    <p class="field-desc col-en">Whether the joke is safe or harmful overall.</p>
+    <p class="field-desc col-ar" dir="rtl">هل النكتة آمنة أم ضارة بشكل عام.</p>
+    <div class="opt col-en"><span class="option-name">Safe</span> — <span class="option-desc">The joke has no harmful content.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">آمن</span> — <span class="option-desc">لا تحتوي النكتة على محتوى ضار.</span></div>
+    <div class="opt col-en"><span class="option-name">Harmful</span> — <span class="option-desc">The joke contains harmful content.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">ضار</span> — <span class="option-desc">تحتوي النكتة على محتوى ضار.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Explicitness</h2><h2 class="col-ar" dir="rtl">درجة الوضوح</h2>
+    <p class="field-desc col-en">Whether any harm is stated outright, only implied, or not present.</p>
+    <p class="field-desc col-ar" dir="rtl">هل الضرر (إن وجد) صريح، ضمني، أم غير موجود.</p>
+    <div class="opt col-en"><span class="option-name">None</span> — <span class="option-desc">Not applicable, the joke is safe.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">بدون</span> — <span class="option-desc">غير منطبق، النكتة آمنة.</span></div>
+    <div class="opt col-en"><span class="option-name">Explicit</span> — <span class="option-desc">The harmful content is stated directly.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">صريح</span> — <span class="option-desc">المحتوى الضار مذكور بشكل مباشر.</span></div>
+    <div class="opt col-en"><span class="option-name">Implicit</span> — <span class="option-desc">The harmful content is only suggested or implied.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">ضمني</span> — <span class="option-desc">المحتوى الضار مجرد تلميح أو إيحاء.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Harm category</h2><h2 class="col-ar" dir="rtl">فئة الضرر</h2>
+    <p class="field-desc col-en">The general category of harm the joke relies on, or Safe if none.</p>
+    <p class="field-desc col-ar" dir="rtl">الفئة العامة للضرر الذي تعتمد عليه النكتة، أو آمن إذا لم يوجد ضرر.</p>
+
+    <div class="opt col-en"><span class="option-name">Safe</span> — <span class="option-desc">No harm category applies.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">آمن</span> — <span class="option-desc">لا تنطبق أي فئة ضرر.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Racism / ethnicity / nationality</span> — <span class="option-desc">Targets race, ethnicity, or nationality.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">عنصرية / عرقية / قومية</span> — <span class="option-desc">يستهدف العرق أو الانتماء العرقي أو القومية.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Religion</span> — <span class="option-desc">Targets a religion or religious belief.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">دين</span> — <span class="option-desc">يستهدف دينًا أو معتقدًا دينيًا.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Gender / sexism</span> — <span class="option-desc">Targets gender or relies on sexist assumptions.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">جندر / تمييز جنسي</span> — <span class="option-desc">يستهدف الجندر أو يعتمد على افتراضات متحيزة جنسيًا.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Sexual content / sexual harassment</span> — <span class="option-desc">Sexual content or harassment.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">محتوى جنسي / تحرش جنسي</span> — <span class="option-desc">محتوى جنسي أو تحرش جنسي.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Disability / illness</span> — <span class="option-desc">Targets disability or illness.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">إعاقة / مرض</span> — <span class="option-desc">يستهدف الإعاقة أو المرض.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Body-shaming / appearance</span> — <span class="option-desc">Mocks physical appearance or body.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">تنمر على المظهر / الجسد</span> — <span class="option-desc">يسخر من المظهر الجسدي.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Violence / death / trauma</span> — <span class="option-desc">Involves violence, death, or trauma.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">عنف / موت / صدمة</span> — <span class="option-desc">يتضمن عنفًا أو موتًا أو صدمة.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Self-harm</span> — <span class="option-desc">References self-harm.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">إيذاء الذات</span> — <span class="option-desc">يشير إلى إيذاء الذات.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Class / poverty</span> — <span class="option-desc">Targets social class or poverty.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">طبقية / فقر</span> — <span class="option-desc">يستهدف الطبقة الاجتماعية أو الفقر.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Age</span> — <span class="option-desc">Targets a particular age group.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">العمر</span> — <span class="option-desc">يستهدف فئة عمرية معينة.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Political identity</span> — <span class="option-desc">Targets political affiliation or identity.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">الهوية السياسية</span> — <span class="option-desc">يستهدف الانتماء أو الهوية السياسية.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Other / unclear</span> — <span class="option-desc">Harmful but doesn't fit another category.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">أخرى / غير واضح</span> — <span class="option-desc">ضار لكنه لا يندرج تحت فئة أخرى.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Harm culture</h2><h2 class="col-ar" dir="rtl">الثقافة المرتبطة بالضرر</h2>
+    <p class="field-desc col-en">Which culture the harmful reference is rooted in.</p>
+    <p class="field-desc col-ar" dir="rtl">الثقافة التي ينتمي إليها المرجع الضار في النكتة.</p>
+
+    <div class="opt col-en"><span class="option-name">Safe</span> — <span class="option-desc">Not applicable.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">آمن</span> — <span class="option-desc">غير منطبق.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Arabic</span> — <span class="option-desc">Rooted in Arabic culture or context.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">عربية</span> — <span class="option-desc">متجذر في الثقافة أو السياق العربي.</span></div>
+
+    <div class="opt col-en"><span class="option-name">English</span> — <span class="option-desc">Rooted in Western/English-speaking culture.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">إنجليزية</span> — <span class="option-desc">متجذر في الثقافة الغربية أو الناطقة بالإنجليزية.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Universal</span> — <span class="option-desc">Not tied to a specific culture.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">عالمية</span> — <span class="option-desc">غير مرتبط بثقافة معينة.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Severity</h2><h2 class="col-ar" dir="rtl">شدة الضرر</h2>
+    <p class="field-desc col-en">How serious the harm is, from mild to severe.</p>
+    <p class="field-desc col-ar" dir="rtl">مدى خطورة الضرر، من خفيف إلى شديد.</p>
+
+    <div class="opt col-en"><span class="option-name">Safe</span> — <span class="option-desc">Not applicable.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">آمن</span> — <span class="option-desc">غير منطبق.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Mild</span> — <span class="option-desc">Slightly harmful.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">خفيف</span> — <span class="option-desc">ضرر بسيط.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Moderate</span> — <span class="option-desc">Noticeably harmful.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">متوسط</span> — <span class="option-desc">ضرر ملحوظ.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Severe</span> — <span class="option-desc">Strongly harmful.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">شديد</span> — <span class="option-desc">ضرر شديد.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Target</h2><h2 class="col-ar" dir="rtl">الفئة المستهدفة</h2>
+    <p class="field-desc col-en">Who or what the joke is aimed at.</p>
+    <p class="field-desc col-ar" dir="rtl">من أو ما الذي تستهدفه النكتة.</p>
+
+    <div class="opt col-en"><span class="option-name">No target</span> — <span class="option-desc">Nobody specific is targeted.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">بدون هدف</span> — <span class="option-desc">لا يوجد هدف محدد.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Individual</span> — <span class="option-desc">Targets a specific person.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">فرد</span> — <span class="option-desc">يستهدف شخصًا محددًا.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Protected group</span> — <span class="option-desc">Targets a group defined by race, gender, religion, etc.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">فئة محمية</span> — <span class="option-desc">يستهدف فئة محمية كالعرق أو الجندر أو الدين.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Institution</span> — <span class="option-desc">Targets an organization or institution.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">مؤسسة</span> — <span class="option-desc">يستهدف مؤسسة أو جهة.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Behavior</span> — <span class="option-desc">Targets a behavior, not a person or group.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">سلوك</span> — <span class="option-desc">يستهدف سلوكًا وليس شخصًا أو فئة.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Event</span> — <span class="option-desc">Targets a specific event.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">حدث</span> — <span class="option-desc">يستهدف حدثًا معينًا.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Self</span> — <span class="option-desc">The joke-teller targets themselves.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">الذات</span> — <span class="option-desc">يستهدف راوي النكتة نفسه.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Humor mechanism</h2><h2 class="col-ar" dir="rtl">آلية الفكاهة</h2>
+    <p class="field-desc col-en">The comedic technique the joke relies on to be funny.</p>
+    <p class="field-desc col-ar" dir="rtl">الأسلوب الكوميدي الذي تعتمد عليه النكتة لتكون مضحكة.</p>
+
+    <div class="opt col-en"><span class="option-name">Pun</span> — <span class="option-desc">Wordplay based on similar-sounding words.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">تورية</span> — <span class="option-desc">تلاعب بالألفاظ بناءً على تشابه الأصوات.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Irony</span> — <span class="option-desc">Saying the opposite of what's meant.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">مفارقة</span> — <span class="option-desc">قول عكس المقصود.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Exaggeration</span> — <span class="option-desc">Overstating something for comic effect.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">مبالغة</span> — <span class="option-desc">مبالغة في وصف شيء لغرض كوميدي.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Incongruity</span> — <span class="option-desc">Humor from an unexpected mismatch.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">تنافر</span> — <span class="option-desc">فكاهة ناتجة عن تناقض غير متوقع.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Sarcasm</span> — <span class="option-desc">Mocking or ironic remarks.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">تهكم</span> — <span class="option-desc">تعليقات ساخرة أو تهكمية.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Slapstick</span> — <span class="option-desc">Physical, exaggerated comedy.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">كوميديا حركية</span> — <span class="option-desc">كوميديا جسدية مبالغ فيها.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Dark twist</span> — <span class="option-desc">An unexpectedly dark or grim ending.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">منعطف قاتم</span> — <span class="option-desc">نهاية مظلمة أو قاتمة غير متوقعة.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Stereotype-based humor</span> — <span class="option-desc">Relies on a stereotype to be funny.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">فكاهة قائمة على الصورة النمطية</span> — <span class="option-desc">يعتمد على صورة نمطية ليكون مضحكًا.</span></div>
+
+    <div class="opt col-en"><span class="option-name">Other</span> — <span class="option-desc">Doesn't fit the listed mechanisms.</span></div>
+    <div class="opt col-ar" dir="rtl"><span class="option-name">أخرى</span> — <span class="option-desc">لا يندرج تحت الآليات المذكورة.</span></div>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Annotator confidence</h2><h2 class="col-ar" dir="rtl">درجة ثقة المُصنِّف</h2>
+    <p class="field-desc col-en">How confident you are in your own answers, 1 (low) to 5 (high).</p>
+    <p class="field-desc col-ar" dir="rtl">مدى ثقتك بإجاباتك، من 1 (منخفضة) إلى 5 (عالية).</p>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Joke summary</h2><h2 class="col-ar" dir="rtl">ملخص النكتة</h2>
+    <p class="field-desc col-en">One sentence stating what the joke actually is.</p>
+    <p class="field-desc col-ar" dir="rtl">جملة واحدة توضح ما هي النكتة فعليًا.</p>
+  </div>
+
+  <div class="field-block">
+    <h2 class="col-en">Why harmful / safe</h2><h2 class="col-ar" dir="rtl">لماذا هي ضارة / آمنة</h2>
+    <p class="field-desc col-en">One sentence explaining your label decision.</p>
+    <p class="field-desc col-ar" dir="rtl">جملة واحدة تشرح سبب قرارك بالتصنيف.</p>
+  </div>
+
+</main>
+
+</body>
+</html>

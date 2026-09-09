@@ -1,0 +1,7 @@
+# Full raw datasets (thousands of files, gigabytes) -- not needed by the
+# site itself, which only reads the small samples in media/. Shared
+# directly with whoever needs the raw data instead of committing here.
+/image_data/
+/video_data/
+
+.DS_Store

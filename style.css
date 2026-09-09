@@ -92,6 +92,18 @@ header {
 
 #switch-btn { margin: 0; background: transparent; border: 1px solid var(--border); }
 
+#docs-link {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+#docs-link:hover { color: var(--text); }
+
 main {
   max-width: 760px;
   margin: 0 auto;
@@ -109,7 +121,38 @@ main {
   min-height: 60px;
 }
 
-.joke-box[dir="rtl"] { font-size: 18px; }
+img.joke-image {
+  max-height: 480px;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+video.joke-video {
+  max-height: 480px;
+  width: 100%;
+  display: block;
+  margin: 0 auto;
+  background: black;
+  border-radius: 4px;
+}
+
+/* Arabic dataset: swap to an Arabic-friendly typeface and nudge sizing.
+   #annotation-screen[dir="rtl"] also mirrors layout (flex/grid order,
+   text alignment) automatically -- no extra rules needed for that. */
+#annotation-screen.lang-ar {
+  font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+#annotation-screen.lang-ar .joke-box {
+  font-size: 19px;
+  line-height: 1.9;
+}
+
+#annotation-screen.lang-ar label {
+  font-size: 14px;
+}
 
 .form-grid {
   display: grid;

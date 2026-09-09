@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Joke Harm Annotation Tool</title>
 <link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
 <body>
@@ -19,6 +22,10 @@
     <select id="language-select">
       <option value="english">English jokes</option>
       <option value="arabic">Arabic jokes</option>
+      <option value="images_english">English images</option>
+      <option value="images_arabic">Arabic images</option>
+      <option value="videos_english">English videos</option>
+      <option value="videos_arabic">Arabic videos</option>
     </select>
 
     <button id="start-btn">Start / Resume</button>
@@ -30,107 +37,112 @@
   <header>
     <div id="progress-text">0 / 0 annotated</div>
     <div class="progress-bar"><div id="progress-fill"></div></div>
-    <button id="switch-btn">Switch annotator/dataset</button>
+    <a id="docs-link" href="docs.html" target="_blank" rel="noopener" data-en="Documentation" data-ar="التوثيق">Documentation</a>
+    <button id="switch-btn" data-en="Switch annotator/dataset" data-ar="تبديل المُصنِّف / المجموعة">Switch annotator/dataset</button>
   </header>
 
   <main>
     <div id="joke-text" class="joke-box"></div>
+    <img id="joke-image" class="joke-box joke-image hidden" alt="">
+    <video id="joke-video" class="joke-box joke-video hidden" controls></video>
+
 
     <div class="form-grid">
       <div class="field">
-        <label>Label</label>
+        <label data-en="Label" data-ar="التصنيف">Label</label>
         <select id="f-label">
-          <option value="">-- select --</option>
-          <option value="safe">Safe</option>
-          <option value="harmful">Harmful</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="safe" data-en="Safe" data-ar="آمن">Safe</option>
+          <option value="harmful" data-en="Harmful" data-ar="ضار">Harmful</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Explicitness</label>
+        <label data-en="Explicitness" data-ar="درجة الوضوح">Explicitness</label>
         <select id="f-explicitness">
-          <option value="">-- select --</option>
-          <option value="none">None</option>
-          <option value="explicit">Explicit</option>
-          <option value="implicit">Implicit</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="none" data-en="None" data-ar="بدون">None</option>
+          <option value="explicit" data-en="Explicit" data-ar="صريح">Explicit</option>
+          <option value="implicit" data-en="Implicit" data-ar="ضمني">Implicit</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Harm category</label>
+        <label data-en="Harm category" data-ar="فئة الضرر">Harm category</label>
         <select id="f-harm-category">
-          <option value="">-- select --</option>
-          <option value="racism_ethnicity_nationality">Racism / ethnicity / nationality</option>
-          <option value="religion">Religion</option>
-          <option value="gender_sexism">Gender / sexism</option>
-          <option value="sexual_content_harassment">Sexual content / sexual harassment</option>
-          <option value="disability_illness">Disability / illness</option>
-          <option value="body_shaming_appearance">Body-shaming / appearance</option>
-          <option value="violence_death_trauma">Violence / death / trauma</option>
-          <option value="self_harm">Self-harm</option>
-          <option value="class_poverty">Class / poverty</option>
-          <option value="age">Age</option>
-          <option value="political_identity">Political identity</option>
-          <option value="other_unclear">Other / unclear</option>
-          <option value="n_a">N/A (safe)</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="safe" data-en="Safe" data-ar="آمن">Safe</option>
+          <option value="racism_ethnicity_nationality" data-en="Racism / ethnicity / nationality" data-ar="عنصرية / عرقية / قومية">Racism / ethnicity / nationality</option>
+          <option value="religion" data-en="Religion" data-ar="دين">Religion</option>
+          <option value="gender_sexism" data-en="Gender / sexism" data-ar="جندر / تمييز جنسي">Gender / sexism</option>
+          <option value="sexual_content_harassment" data-en="Sexual content / sexual harassment" data-ar="محتوى جنسي / تحرش جنسي">Sexual content / sexual harassment</option>
+          <option value="disability_illness" data-en="Disability / illness" data-ar="إعاقة / مرض">Disability / illness</option>
+          <option value="body_shaming_appearance" data-en="Body-shaming / appearance" data-ar="تنمر على المظهر / الجسد">Body-shaming / appearance</option>
+          <option value="violence_death_trauma" data-en="Violence / death / trauma" data-ar="عنف / موت / صدمة">Violence / death / trauma</option>
+          <option value="self_harm" data-en="Self-harm" data-ar="إيذاء الذات">Self-harm</option>
+          <option value="class_poverty" data-en="Class / poverty" data-ar="طبقية / فقر">Class / poverty</option>
+          <option value="age" data-en="Age" data-ar="العمر">Age</option>
+          <option value="political_identity" data-en="Political identity" data-ar="الهوية السياسية">Political identity</option>
+          <option value="other_unclear" data-en="Other / unclear" data-ar="أخرى / غير واضح">Other / unclear</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Harm culture</label>
+        <label data-en="Harm culture" data-ar="الثقافة المرتبطة بالضرر">Harm culture</label>
         <select id="f-harm-culture">
-          <option value="">-- select --</option>
-          <option value="arabic">Arabic</option>
-          <option value="english">English</option>
-          <option value="universal">Universal</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="safe" data-en="Safe" data-ar="آمن">Safe</option>
+          <option value="arabic" data-en="Arabic" data-ar="عربية">Arabic</option>
+          <option value="english" data-en="English" data-ar="إنجليزية">English</option>
+          <option value="universal" data-en="Universal" data-ar="عالمية">Universal</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Severity</label>
+        <label data-en="Severity" data-ar="شدة الضرر">Severity</label>
         <select id="f-severity">
-          <option value="">-- select --</option>
-          <option value="n_a">N/A (safe)</option>
-          <option value="mild">Mild</option>
-          <option value="moderate">Moderate</option>
-          <option value="severe">Severe</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="safe" data-en="Safe" data-ar="آمن">Safe</option>
+          <option value="mild" data-en="Mild" data-ar="خفيف">Mild</option>
+          <option value="moderate" data-en="Moderate" data-ar="متوسط">Moderate</option>
+          <option value="severe" data-en="Severe" data-ar="شديد">Severe</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Target</label>
+        <label data-en="Target" data-ar="الفئة المستهدفة">Target</label>
         <select id="f-target">
-          <option value="">-- select --</option>
-          <option value="none">No target</option>
-          <option value="individual">Individual</option>
-          <option value="protected_group">Protected group</option>
-          <option value="institution">Institution</option>
-          <option value="behavior">Behavior</option>
-          <option value="event">Event</option>
-          <option value="self">Self</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="none" data-en="No target" data-ar="بدون هدف">No target</option>
+          <option value="individual" data-en="Individual" data-ar="فرد">Individual</option>
+          <option value="protected_group" data-en="Protected group" data-ar="فئة محمية">Protected group</option>
+          <option value="institution" data-en="Institution" data-ar="مؤسسة">Institution</option>
+          <option value="behavior" data-en="Behavior" data-ar="سلوك">Behavior</option>
+          <option value="event" data-en="Event" data-ar="حدث">Event</option>
+          <option value="self" data-en="Self" data-ar="الذات">Self</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Humor mechanism</label>
+        <label data-en="Humor mechanism" data-ar="آلية الفكاهة">Humor mechanism</label>
         <select id="f-humor-mechanism">
-          <option value="">-- select --</option>
-          <option value="pun">Pun</option>
-          <option value="irony">Irony</option>
-          <option value="exaggeration">Exaggeration</option>
-          <option value="incongruity">Incongruity</option>
-          <option value="sarcasm">Sarcasm</option>
-          <option value="slapstick">Slapstick</option>
-          <option value="dark_twist">Dark twist</option>
-          <option value="stereotype_based_humor">Stereotype-based humor</option>
-          <option value="other">Other</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
+          <option value="pun" data-en="Pun" data-ar="تورية">Pun</option>
+          <option value="irony" data-en="Irony" data-ar="مفارقة">Irony</option>
+          <option value="exaggeration" data-en="Exaggeration" data-ar="مبالغة">Exaggeration</option>
+          <option value="incongruity" data-en="Incongruity" data-ar="تنافر">Incongruity</option>
+          <option value="sarcasm" data-en="Sarcasm" data-ar="تهكم">Sarcasm</option>
+          <option value="slapstick" data-en="Slapstick" data-ar="كوميديا حركية">Slapstick</option>
+          <option value="dark_twist" data-en="Dark twist" data-ar="منعطف قاتم">Dark twist</option>
+          <option value="stereotype_based_humor" data-en="Stereotype-based humor" data-ar="فكاهة قائمة على الصورة النمطية">Stereotype-based humor</option>
+          <option value="other" data-en="Other" data-ar="أخرى">Other</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Annotator confidence</label>
+        <label data-en="Annotator confidence" data-ar="درجة ثقة المُصنِّف">Annotator confidence</label>
         <select id="f-confidence">
-          <option value="">-- select --</option>
+          <option value="" data-en="-- select --" data-ar="-- اختر --">-- select --</option>
           <option value="1">1</option>
           <option value="2">2</option>
           <option value="3">3</option>
@@ -140,25 +152,31 @@
       </div>
 
       <div class="field wide">
-        <label>Joke summary (one sentence: what is the joke?)</label>
-        <input type="text" id="f-joke-summary" placeholder="e.g. A husband deflects his wife's hypothetical question with a backhanded compliment.">
+        <label data-en="Joke summary (one sentence: what is the joke?)" data-ar="ملخص النكتة (جملة واحدة: ما هي النكتة؟)">Joke summary (one sentence: what is the joke?)</label>
+        <input type="text" id="f-joke-summary"
+          placeholder="e.g. A husband deflects his wife's hypothetical question with a backhanded compliment."
+          data-en-placeholder="e.g. A husband deflects his wife's hypothetical question with a backhanded compliment."
+          data-ar-placeholder="مثال: زوج يتهرب من سؤال افتراضي لزوجته بمجاملة مبطنة.">
       </div>
 
       <div class="field wide">
-        <label>Why harmful / safe (one sentence)</label>
-        <input type="text" id="f-why" placeholder="e.g. Relies on a mother-in-law stereotype to imply she's unwanted.">
+        <label data-en="Why harmful / safe (one sentence)" data-ar="لماذا هي ضارة / آمنة (جملة واحدة)">Why harmful / safe (one sentence)</label>
+        <input type="text" id="f-why"
+          placeholder="e.g. Relies on a mother-in-law stereotype to imply she's unwanted."
+          data-en-placeholder="e.g. Relies on a mother-in-law stereotype to imply she's unwanted."
+          data-ar-placeholder="مثال: تعتمد على صورة نمطية عن الحماة لتوحي بأنها غير مرغوب بها.">
       </div>
     </div>
 
     <div class="nav-row">
-      <button id="prev-btn">&larr; Previous</button>
+      <button id="prev-btn" data-en="&larr; Previous" data-ar="السابق &rarr;">&larr; Previous</button>
       <span id="index-text"></span>
-      <button id="next-btn">Next &rarr;</button>
+      <button id="next-btn" data-en="Next &rarr;" data-ar="&larr; التالي">Next &rarr;</button>
     </div>
   </main>
 
   <footer>
-    <button id="export-btn">Export my annotations (JSON)</button>
+    <button id="export-btn" data-en="Export my annotations (JSON)" data-ar="تصدير تعليقاتي (JSON)">Export my annotations (JSON)</button>
   </footer>
 </div>
 
