@@ -67,9 +67,19 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
   - Text true label = `Offensive`, taken from the GPT-5 file. The GPT-4o Arabic file has a slightly different copy of row 900 (label 0 vs 1); label 1 is used.
   - Video true label = `Inappropriate` in `labels.csv`.
 - **Pool:** items where at least 2 of the 4 models were wrong (binary harmful/safe). English text 332, Arabic text 222; videos English 183 + Arabic 180 + Universal 184, with Universal split randomly in half → pools of 275 / 272.
-- **Picked:** 100 per type per language, pure random (seed 42), split into 3 batches (34/33/33).
-- **Annotators are language-specific:** each does 100 text + 100 videos + 100 images in their language; all annotators of a language get the same items (for agreement).
-- Images: pending model results; image CSVs are header-only, and the site shows "no items yet".
+- **Batches:** every pool item is used once, in random order (seed 42), cut into batches of **100 per type**; the last batch holds the rest:
+
+  | Track | Pool | batch_01 | batch_02 | batch_03 | batch_04 |
+  |---|---|---|---|---|---|
+  | English text | 332 | 100 | 100 | 100 | 32 |
+  | Arabic text | 222 | 100 | 100 | 22 | – |
+  | English videos | 275 | 100 | 100 | 75 | – |
+  | Arabic videos | 272 | 100 | 100 | 72 | – |
+  | Images | pending | | | | |
+
+  So a full batch = 100 text + 100 videos + 100 images per language.
+- **Annotators are language-specific:** each annotator does their language's tracks; all annotators of a language get the same items (for agreement).
+- Tracks a batch doesn't have (pool exhausted, or images pending) get header-only CSVs, and the site shows "no items yet".
 
 ## Releasing batches
 

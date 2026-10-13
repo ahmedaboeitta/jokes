@@ -3,8 +3,9 @@
 Selection rule: items where at least 2 of the 4 models (GPT-4o, GPT-5 /
 GPT-5 Pro, Gemini 2.5 Pro, Gemini 3 Pro) predicted the wrong harmful/safe
 label. Universal videos (>=2 wrong) are split randomly in half between the
-English and Arabic pools. From each pool, 100 items are picked at random and
-split into 3 batches (34 / 33 / 33).
+English and Arabic pools. Each pool is shuffled and cut into batches of 100
+per type; the last batch holds the rest (e.g. 332 -> 100/100/100/32). Every
+pool item is used exactly once.
 
 Outputs:
   batches/batch_0N/text/{english,arabic}.csv      public, what the site shows
@@ -25,8 +26,7 @@ import random
 import shutil
 
 SEED = 42
-PER_TYPE = 100
-N_BATCHES = 3
+PER_BATCH = 100
 MIN_WRONG = 2
 
 SRC = "source_data"
@@ -128,15 +128,9 @@ def video_pools(rng):
     }
 
 
-def split(items, n):
-    """Split into n nearly equal consecutive chunks (34/33/33 for 100)."""
-    size, extra = divmod(len(items), n)
-    out, start = [], 0
-    for i in range(n):
-        end = start + size + (1 if i < extra else 0)
-        out.append(items[start:end])
-        start = end
-    return out
+def chunks(items, size):
+    """Consecutive chunks of `size`; the last one holds the rest."""
+    return [items[i:i + size] for i in range(0, len(items), size)]
 
 
 def main():
@@ -152,17 +146,20 @@ def main():
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
 
+    n_batches = 0
     manifest = [[
         "batch", "dataset", "item_index", "item_id", "item", "true_label",
         "explicit", "models_wrong", "source_language",
     ]]
     for (kind, lang), pool in sorted(pools.items()):
         pool = sorted(pool, key=lambda x: str(x["item_id"]))
-        picked = rng.sample(pool, PER_TYPE)  # random order too
+        rng.shuffle(pool)
         lang_key = lang.lower()
         dataset = lang_key if kind == "text" else f"videos_{lang_key}"
-        print(f"{kind:6} {lang:7} pool={len(pool):3} picked={len(picked)}")
-        for b, chunk in enumerate(split(picked, N_BATCHES), start=1):
+        parts = chunks(pool, PER_BATCH)
+        n_batches = max(n_batches, len(parts))
+        print(f"{kind:6} {lang:7} pool={len(pool):3} batches={[len(c) for c in parts]}")
+        for b, chunk in enumerate(parts, start=1):
             folder = os.path.join(OUT, f"batch_{b:02d}", kind)
             if kind == "text":
                 rows = [["item_id", "Jokes"]] + [[x["item_id"], x["item"]] for x in chunk]
@@ -181,10 +178,16 @@ def main():
                     x["explicit"], x["models_wrong"], x["source_language"],
                 ])
 
-    # Images: placeholders until the image model results are available.
-    for b in range(1, N_BATCHES + 1):
-        for lang_key in ("english", "arabic"):
-            write_rows(os.path.join(OUT, f"batch_{b:02d}", "images", f"{lang_key}.csv"), [["post id"]])
+    # Header-only CSVs for any track a batch doesn't have (pool ran out, or
+    # no image model results yet), so the site shows "no items" instead of
+    # failing to load the file.
+    headers = {"text": ["item_id", "Jokes"], "videos": ["video_name"], "images": ["post id"]}
+    for b in range(1, n_batches + 1):
+        for kind, header in headers.items():
+            for lang_key in ("english", "arabic"):
+                path = os.path.join(OUT, f"batch_{b:02d}", kind, f"{lang_key}.csv")
+                if not os.path.exists(path):
+                    write_rows(path, [header])
 
     write_rows(MANIFEST, manifest)
     print(f"manifest: {MANIFEST} ({len(manifest) - 1} items)")
