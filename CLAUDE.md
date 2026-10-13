@@ -1,52 +1,95 @@
 # Jokes Harm Annotation Tool
 
 A static, no-build-step web app for annotating a harmful-humor dataset
-(jokes, images, videos) across English and Arabic. Hosted on GitHub Pages,
-data saved locally per annotator (no backend).
+(jokes, images, videos) across English and Arabic. Hosted on GitHub Pages;
+annotations are saved through a Google Apps Script backend into a private
+Google Sheet.
 
 - **Live site:** https://ahmedaboeitta.github.io/jokes/
-- **Repo:** https://github.com/ahmedaboeitta/jokes (branch `main`; push = auto-deploy to Pages)
+- **Repo:** https://github.com/ahmedaboeitta/jokes (branch `main`; push = auto-deploy to Pages). The repo is **public**.
 - **Git commits:** plain messages, no `Co-Authored-By: Claude` trailer (matches the user's preference in the sibling `hekayah` project).
 
 ## What this is
 
-An annotator opens the site, enters a name/ID, picks a dataset track, and
-works through items filling in a harm/humor schema per item. Progress
-autosaves to `localStorage` per (name, dataset) so closing the tab and
-coming back resumes where you left off. There is no server — annotators
-export their work as JSON when done (`Export my annotations` button).
+An annotator logs in (name from a dropdown + password), picks a batch and a
+track in their language, and works through the items filling in a harm/humor
+schema per item. Every change is kept in `localStorage` and auto-synced to the
+Sheet, so work can be resumed from any device. `Export my annotations (JSON)`
+downloads a backup copy.
+
+## Architecture
+
+```
+GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive (private)
+```
+
+- **Google Sheet "Annotations DB"** (private, owner only):
+  https://docs.google.com/spreadsheets/d/1TfdLguarBB7gGzm-bB280ok5Xs1GoihNrpc5JDfpUaQ
+  - `annotators`: `annotator_id | display_name | password | active | language` (language = `english`/`arabic`). Adding a row adds the annotator to the site dropdown, no push needed.
+  - `annotations`: append-only; one row per save. The **latest row per (annotator, batch, dataset, item_index) is the current answer**; older rows are history. Includes all schema fields, timing fields, and a `raw_json` copy of the entry.
+  - `log`: logins, bad passwords, lockouts, wrong-language attempts, errors.
+- **Apps Script** (`apps_script/Code.gs` is the copy of record; it's pasted into the Sheet via Extensions → Apps Script). Deployed as a web app, Execute as: Me, Access: Anyone:
+  https://script.google.com/macros/s/AKfycbyT7qIUSRt-SQX0Hbow3rRw99cymZJR3vmE7XqODja8Xodzewn8pAvihmomfOp72EAk1w/exec
+  - Actions: `annotators`, `login`, `save`, `load`. The password is checked on **every** request (the URL is public in `app.js`). 10 wrong attempts lock the account for 15 minutes. Save/load refuse datasets outside the annotator's language.
+  - **Updating the script without changing the URL:** Deploy → Manage deployments → Edit → Version: New version. ("New deployment" creates a new URL.)
+  - Requests are POSTs with a text/plain body to avoid a CORS preflight.
+- **Drive export:** `buildFolders()` writes
+  `jokes annotations/Annotations/<English|Arabic>_annotators/<annotator_id>/<Language>_<Type>_batchXX.csv`
+  (latest answer per item, overwritten each run). Run from the Sheet menu
+  **Annotations → Build folders now**, and nightly (~2am) via the trigger set by
+  **Annotations → Turn on nightly build**. Drive folder:
+  https://drive.google.com/drive/folders/1ZW0XqFmVcg7jYZPDkr92MRdZanhns2lD
+- **Passwords live only in the Sheet**, never in the repo.
 
 ## File layout
 
-- `index.html` / `app.js` / `style.css` — the annotation app.
-- `docs.html` — standalone bilingual (EN | AR side-by-side) documentation
-  of every schema field and its dropdown options.
-- `data/*.csv` — per-dataset item lists. The `*_sample10.csv` files are the
-  actual 10-per-language samples currently wired into the app (seeded
-  `random.seed(42)`, reproducible). The full unsampled `english_jokes.csv`
-  / `arabic_jokes.csv` are also here for future re-sampling.
-- `media/images/`, `media/videos/` — the ~40 actual image/video files
-  referenced by the sample CSVs (small, committed to git so the hosted
-  site works).
-- `image_data/`, `video_data/` — **git-ignored**. The full raw datasets
-  (6,005 images / 1,202 videos, ~3GB total). Not needed by the live site,
-  only for pulling new samples later. Shared with collaborators directly
-  (not via git) since they're too large to push.
+- `index.html` / `app.js` / `style.css`: the annotation app.
+- `docs.html`: bilingual (EN | AR side-by-side) annotator docs: how the site works + every schema field and option.
+- `apps_script/Code.gs`: backend code (see above).
+- `batches/batch_XX/`: what the site shows (public). Per batch:
+  `text/{english,arabic}.csv` (`item_id, Jokes`), `videos/{english,arabic}.csv` (`video_name`) + `videos/files/*.mp4`, `images/{english,arabic}.csv` (`post id`) + `images/files/`. **No true labels in these files** (they're public).
+- `scripts/make_batches.py`: rebuilds `batches/` and the private manifest from `source_data/` (deletes and recreates `batches/`). Seeded, reproducible.
+- `source_data/`: **git-ignored**, private raw research data (~3GB):
+  - `text_data/jokes/{english,arabic}_jokes.csv`: original jokes.
+  - `text_data/model_outputs/{English,Arabic}/<model>/*.csv`: 10 models' outputs (`row_id, Jokes, Offensive, Explicit, Output_Class, Output_Reason`).
+  - `text_data/results/text_models_wrong.csv`.
+  - `video_data/videos/*.mp4` (1,202), `video_data/labels.csv` (`Video Name, Inappropriate, Explicit, Language`; first 3 lines are headers/blank).
+  - `video_data/model_outputs/{gpt4o,gpt5_pro,gemini2.5_pro,gemini3_pro}.csv` (`Video Name, Harmful, Evidence|Explanation`).
+  - `video_data/results/videos_models_wrong.csv`.
+  - `image_data/images/` (6,006 files), `image_data/labels.csv` (`post id, label, language`; 6,005 rows, one image unlabeled). No image model outputs yet.
+  - `selection/batches_manifest.csv`: per batch item: true label, explicit, models_wrong, source_language.
+- `Move from harmful.docx`: the user's research-plan notes (placement undecided).
 
-## Dataset tracks (dropdown on the setup screen)
+## Sample selection (current batches)
 
-| Key | Source | Type |
-|---|---|---|
-| `english` | `data/english_jokes_sample10.csv` | text |
-| `arabic` | `data/arabic_jokes_sample10.csv` | text |
-| `images_english` | `data/images_english_sample10.csv` | image |
-| `images_arabic` | `data/images_arabic_sample10.csv` | image |
-| `videos_english` | `data/videos_english_sample10.csv` | video |
-| `videos_arabic` | `data/videos_arabic_sample10.csv` | video |
+- **Models (4):** GPT-4o, GPT-5 (text) / GPT-5 Pro (videos), Gemini 2.5 Pro, Gemini 3 Pro. The other 6 text models in `model_outputs/` are not used for selection.
+  - Gemini 3 English official file: `gemini_english_jokes_combined.csv` (it differs from `FIRST_`/`SECOND_` on 38 answers).
+  - Text true label = `Offensive`, taken from the GPT-5 file. The GPT-4o Arabic file has a slightly different copy of row 900 (label 0 vs 1); label 1 is used.
+  - Video true label = `Inappropriate` in `labels.csv`.
+- **Pool:** items where at least 2 of the 4 models were wrong (binary harmful/safe). English text 332, Arabic text 222; videos English 183 + Arabic 180 + Universal 184, with Universal split randomly in half → pools of 275 / 272.
+- **Picked:** 100 per type per language, pure random (seed 42), split into 3 batches (34/33/33).
+- **Annotators are language-specific:** each does 100 text + 100 videos + 100 images in their language; all annotators of a language get the same items (for agreement).
+- Images: pending model results; image CSVs are header-only, and the site shows "no items yet".
 
-Config for each lives in `DATASETS` at the top of `app.js`. Adding a new
-track is: add a CSV, add an entry to `DATASETS`, add an `<option>` to
-`#language-select` in `index.html`.
+## Releasing batches
+
+`RELEASED_BATCHES` at the top of `app.js` lists the batches annotators can pick
+(currently `[1]`). Releasing the next one (intended: every two weeks) = add its
+number, commit, push.
+
+## Dataset tracks
+
+| Key | File (inside `batches/batch_XX/`) | Type | Language |
+|---|---|---|---|
+| `english` | `text/english.csv` | text | english |
+| `arabic` | `text/arabic.csv` | text | arabic |
+| `images_english` | `images/english.csv` | image | english |
+| `images_arabic` | `images/arabic.csv` | image | arabic |
+| `videos_english` | `videos/english.csv` | video | english |
+| `videos_arabic` | `videos/arabic.csv` | video | arabic |
+
+Config lives in `DATASETS` in `app.js`; the dataset → language map is
+duplicated in `DATASET_LANGUAGE` in `Code.gs` (keep them in sync).
 
 ## Annotation schema (10 fields, see `docs.html` for full descriptions)
 
@@ -55,26 +98,32 @@ track is: add a CSV, add an entry to `DATASETS`, add an `<option>` to
 `why_harmful_or_safe`.
 
 Key rule: **if `label` = Safe, then `harm_category`, `harm_culture`, and
-`severity` auto-set to "Safe" and lock** (see `applySafeLock()` in
-`app.js`) — a harmful-only field can't be filled in for a safe item.
+`severity` auto-set to "Safe" and lock** (see `applySafeLock()` in `app.js`).
+
+## Timing (quality monitoring, recorded silently)
+
+Per item, accumulated across visits: `timeSpentSec` (on screen),
+`activeTimeSec` (tab visible and input within the last 60s, or video
+playing), `visits`, `firstOpenedAt`, `annotatedAt`; video items also
+`videoPlayed`, `videoWatchedSec` (seeks excluded), `videoDurationSec`.
+
+## Sync details
+
+Entries carry local-only `_rev`/`_dirty` fields (stripped before sending).
+Saves are debounced (2s) and retried every 15s on failure; `sendBeacon` on
+tab hide/close. On session start, local and server copies are merged per
+item and the newer `annotatedAt` wins. The password is held in memory only, so
+a reload means logging in again.
 
 ## Localization
 
-The Arabic dataset tracks (`arabic`, `images_arabic`, `videos_arabic`)
-display the whole form in Arabic (RTL, Cairo font) via `data-en`/`data-ar`
-attributes on every label/option/placeholder in `index.html`, swapped by
-`applyLanguage()` in `app.js`. **Stored/exported values always stay the
-English slugs** (e.g. `"harm_category": "racism_ethnicity_nationality"`)
-regardless of which language was displayed — only the visible text
-changes, not the underlying value.
+The Arabic tracks display the whole form in Arabic (RTL, Cairo font) via
+`data-en`/`data-ar` attributes, swapped by `applyLanguage()`. **Stored values
+are always the English slugs** regardless of display language. The setup
+screen itself is English only.
 
-## Known constraints / open items
+## Known open items
 
-- No backend and no GitHub push-back: annotations are export-only
-  (JSON download). Two annotators using the same name/ID on different
-  devices would each have separate local progress with no merge — not
-  currently handled.
-- Sample sizes are small (10 per language per track) — intended as a
-  pilot/test set, not the full dataset. Re-sampling more requires editing
-  the Python one-off scripts used originally (not currently saved as
-  reusable files — recreate by reading each `*_sample10.csv`'s pattern).
+- Image model results are not in yet, so the image tracks are empty.
+- The `annotations` tab and Drive still contain test rows from user `hesham` (batches `test`, the old test `batch_02`), plus an old `Annotations/hesham/` folder from before the language folders existed.
+- Once, a `load` was rejected as bad_credentials right after a successful login; not reproduced since.

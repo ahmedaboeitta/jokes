@@ -15,27 +15,46 @@
 <div id="setup-screen" class="screen">
   <div class="card">
     <h1>Joke Harm Annotation</h1>
-    <label for="annotator-name">Your name / ID</label>
-    <input type="text" id="annotator-name" placeholder="e.g. ahmed">
 
-    <label for="language-select">Dataset</label>
-    <select id="language-select">
-      <option value="english">English jokes</option>
-      <option value="arabic">Arabic jokes</option>
-      <option value="images_english">English images</option>
-      <option value="images_arabic">Arabic images</option>
-      <option value="videos_english">English videos</option>
-      <option value="videos_arabic">Arabic videos</option>
-    </select>
+    <div id="login-step" class="step">
+      <label for="annotator-select">Annotator</label>
+      <select id="annotator-select"><option value="">Loading…</option></select>
 
-    <button id="start-btn">Start / Resume</button>
-    <p class="hint">Your progress is saved in this browser and resumes automatically next time you enter the same name.</p>
+      <label for="annotator-password">Password</label>
+      <input type="password" id="annotator-password" autocomplete="current-password">
+
+      <button id="login-btn">Log in</button>
+    </div>
+
+    <div id="choose-step" class="step hidden">
+      <p id="welcome-text"></p>
+
+      <label for="batch-select">Batch</label>
+      <select id="batch-select"></select>
+
+      <label for="language-select">Dataset</label>
+      <select id="language-select">
+        <option value="english">English jokes</option>
+        <option value="arabic">Arabic jokes</option>
+        <option value="images_english">English images</option>
+        <option value="images_arabic">Arabic images</option>
+        <option value="videos_english">English videos</option>
+        <option value="videos_arabic">Arabic videos</option>
+      </select>
+
+      <button id="start-btn">Start / Resume</button>
+      <button id="logout-btn" class="secondary">Log out</button>
+    </div>
+
+    <p id="setup-error" class="error hidden"></p>
+    <p class="hint">Your work is saved automatically online, so you can continue from any device by logging in again.</p>
   </div>
 </div>
 
 <div id="annotation-screen" class="screen hidden">
   <header>
     <div id="progress-text">0 / 0 annotated</div>
+    <div id="sync-status"></div>
     <div class="progress-bar"><div id="progress-fill"></div></div>
     <a id="docs-link" href="docs.html" target="_blank" rel="noopener" data-en="Documentation" data-ar="التوثيق">Documentation</a>
     <button id="switch-btn" data-en="Switch annotator/dataset" data-ar="تبديل المُصنِّف / المجموعة">Switch annotator/dataset</button>

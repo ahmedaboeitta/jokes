@@ -1,7 +1,6 @@
-# Full raw datasets (thousands of files, gigabytes) -- not needed by the
-# site itself, which only reads the small samples in media/. Shared
-# directly with whoever needs the raw data instead of committing here.
-/image_data/
-/video_data/
+# All raw research data (full image/video/text datasets, model outputs,
+# results) lives here -- gigabytes, and private. The site only reads the
+# small published samples in batches/. Shared directly with collaborators.
+/source_data/
 
 .DS_Store
