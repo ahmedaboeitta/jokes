@@ -141,5 +141,5 @@ screen itself is English only.
 ## Known open items
 
 - Image model results are not in yet, so the image tracks are empty.
-- The `annotations` tab and Drive still contain test rows from user `hesham` (batches `test`, the old test `batch_02`), plus an old `Annotations/hesham/` folder from before the language folders existed.
+- `hesham` is the test annotator (English). Test data was cleared on 2026-10-14; delete any new `hesham` rows/files before real annotation starts if needed.
 - Once, a `load` was rejected as bad_credentials right after a successful login; not reproduced since.
