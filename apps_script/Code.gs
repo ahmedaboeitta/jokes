@@ -55,6 +55,7 @@ const COLUMNS = [
   ["annotator_id", (e, r) => r.annotatorId],
   ["batch", (e, r) => r.batch],
   ["dataset", (e, r) => r.dataset],
+  ["item_id", (e) => e.itemId],
   ["item_index", (e) => e.itemIndex],
   ["item", (e) => e.itemText || e.itemMedia || ""],
   ["label", (e) => e.label],
@@ -68,15 +69,10 @@ const COLUMNS = [
   ["joke_summary", (e) => e.jokeSummary],
   ["why_harmful_or_safe", (e) => e.why],
   ["time_spent_sec", (e) => e.timeSpentSec],
-  ["active_time_sec", (e) => e.activeTimeSec],
-  ["visits", (e) => e.visits],
-  ["first_opened_at", (e) => e.firstOpenedAt],
   ["annotated_at", (e) => e.annotatedAt],
-  ["video_played", (e) => e.videoPlayed],
-  ["video_watched_sec", (e) => e.videoWatchedSec],
-  ["video_duration_sec", (e) => e.videoDurationSec],
   ["raw_json", (e) => JSON.stringify(e)],
 ];
+const COLUMN_GETTERS = Object.fromEntries(COLUMNS);
 
 function doPost(e) {
   try {
@@ -170,17 +166,21 @@ function save(req) {
     batch: String(req.batch || ""),
     dataset: String(req.dataset || ""),
   };
-  const rows = entries.map((entry) => COLUMNS.map(([, get]) => cell(get(entry, ctx))));
-
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const sh = annotationsSheet();
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, COLUMNS.length).setValues(rows);
+    // Rows follow the Sheet's own header, so adding or removing a column in
+    // COLUMNS never shifts older rows. Columns no longer written stay empty.
+    const header = annotationsHeader(sh);
+    const rows = entries.map((entry) =>
+      header.map((name) => (COLUMN_GETTERS[name] ? cell(COLUMN_GETTERS[name](entry, ctx)) : ""))
+    );
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, header.length).setValues(rows);
   } finally {
     lock.releaseLock();
   }
-  return { ok: true, saved: rows.length };
+  return { ok: true, saved: entries.length };
 }
 
 function load(req) {
@@ -189,18 +189,23 @@ function load(req) {
   const langError = checkLanguage(auth.annotator, req.dataset);
   if (langError) return langError;
   const sh = annotationsSheet();
-  const values = sh.getDataRange().getValues().slice(1);
-  const col = (name) => COLUMNS.findIndex(([n]) => n === name);
-  const [cId, cBatch, cDataset, cIndex, cRaw] =
-    ["annotator_id", "batch", "dataset", "item_index", "raw_json"].map(col);
+  const all = sh.getDataRange().getValues();
+  const header = all[0];
+  const values = all.slice(1);
+  const col = (name) => header.indexOf(name);
+  const [cId, cBatch, cDataset, cItem, cRaw] =
+    ["annotator_id", "batch", "dataset", "item_id", "raw_json"].map(col);
+  if (cItem === -1) return { ok: true, entries: [] };
 
   // Rows are appended in time order, so a later row overwrites an earlier one.
+  // Old rows without an item_id are skipped.
   const latest = {};
   for (const r of values) {
     if (String(r[cId]) !== auth.annotator.id) continue;
     if (String(r[cBatch]) !== String(req.batch) || String(r[cDataset]) !== String(req.dataset)) continue;
+    if (String(r[cItem]) === "") continue;
     try {
-      latest[r[cIndex]] = JSON.parse(r[cRaw]);
+      latest[String(r[cItem])] = JSON.parse(r[cRaw]);
     } catch (err) {
       // skip a damaged row rather than failing the whole load
     }
@@ -240,16 +245,20 @@ function buildFolders() {
   const header = values[0];
   const rows = values.slice(1);
   const col = (name) => header.indexOf(name);
-  const [cId, cBatch, cDataset, cIndex] =
-    ["annotator_id", "batch", "dataset", "item_index"].map(col);
-  const outCols = header.map((h, i) => i).filter((i) => header[i] !== "raw_json");
+  const [cId, cBatch, cDataset, cItem, cIndex] =
+    ["annotator_id", "batch", "dataset", "item_id", "item_index"].map(col);
+  if (cItem === -1) return 0;
+  // Only the current columns (old, no-longer-written ones are left out).
+  const outCols = header.map((h, i) => i)
+    .filter((i) => COLUMN_GETTERS[header[i]] && header[i] !== "raw_json");
 
   // Rows are in time order, so a later row replaces an earlier one.
+  // Old rows without an item_id are left out.
   const groups = {};
   for (const r of rows) {
-    if (!String(r[cId])) continue;
+    if (!String(r[cId]) || String(r[cItem]) === "") continue;
     const g = [r[cId], r[cBatch], r[cDataset]].join("|");
-    (groups[g] = groups[g] || {})[r[cIndex]] = r;
+    (groups[g] = groups[g] || {})[String(r[cItem])] = r;
   }
 
   const out = getOrCreateFolder(DriveApp.getFolderById(ROOT_FOLDER_ID), OUTPUT_FOLDER);
@@ -313,6 +322,17 @@ function annotationsSheet() {
     sh.setFrozenRows(1);
   }
   return sh;
+}
+
+// The header row, with any column from COLUMNS that's missing appended.
+function annotationsHeader(sh) {
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const missing = COLUMNS.map(([n]) => n).filter((n) => header.indexOf(n) === -1);
+  if (missing.length) {
+    sh.getRange(1, header.length + 1, 1, missing.length).setValues([missing]);
+    return header.concat(missing);
+  }
+  return header;
 }
 
 // Stop free text that starts with = + - @ from being run as a Sheet formula.

@@ -25,18 +25,21 @@ const DATASETS = {
     file: "text/english.csv",
     type: "text",
     itemColumn: "Jokes",
+    idColumn: "item_id",
     uiLang: "english",
   },
   arabic: {
     file: "text/arabic.csv",
     type: "text",
     itemColumn: "Jokes",
+    idColumn: "item_id",
     uiLang: "arabic",
   },
   images_english: {
     file: "images/english.csv",
     type: "image",
     itemColumn: "post id",
+    idColumn: "post id",
     mediaBase: "images/files/",
     uiLang: "english",
   },
@@ -44,6 +47,7 @@ const DATASETS = {
     file: "images/arabic.csv",
     type: "image",
     itemColumn: "post id",
+    idColumn: "post id",
     mediaBase: "images/files/",
     uiLang: "arabic",
   },
@@ -51,6 +55,7 @@ const DATASETS = {
     file: "videos/english.csv",
     type: "video",
     itemColumn: "video_name",
+    idColumn: "video_name",
     mediaBase: "videos/files/",
     mediaExt: ".mp4",
     uiLang: "english",
@@ -59,6 +64,7 @@ const DATASETS = {
     file: "videos/arabic.csv",
     type: "video",
     itemColumn: "video_name",
+    idColumn: "video_name",
     mediaBase: "videos/files/",
     mediaExt: ".mp4",
     uiLang: "arabic",
@@ -97,7 +103,7 @@ function currentDataset() {
 }
 
 function storageKey(annotator, batch, datasetKey) {
-  return `jokes_annotations_v2__${batch}__${datasetKey}__${annotator}`;
+  return `jokes_annotations_v3__${batch}__${datasetKey}__${annotator}`;
 }
 
 function loadAnnotationsFromStorage(annotator, batch, datasetKey) {
@@ -158,7 +164,7 @@ async function syncNow() {
   if (syncing || !state.password) return;
   const dirty = Object.values(state.annotations).filter((a) => a && a._dirty);
   if (!dirty.length) return setSyncStatus("saved");
-  const sent = dirty.map((a) => ({ index: a.itemIndex, rev: a._rev }));
+  const sent = dirty.map((a) => ({ id: a.itemId, rev: a._rev }));
   const ctx = { batch: state.batch, dataset: state.datasetKey };
   syncing = true;
   setSyncStatus("saving");
@@ -168,8 +174,8 @@ async function syncNow() {
     // Only clear entries that weren't edited again while the request was out,
     // and only if the annotator hasn't switched dataset meanwhile.
     if (ctx.batch === state.batch && ctx.dataset === state.datasetKey) {
-      for (const { index, rev } of sent) {
-        const a = state.annotations[index];
+      for (const { id, rev } of sent) {
+        const a = state.annotations[id];
         if (a && a._rev === rev) a._dirty = false;
       }
       persistAnnotations();
@@ -214,13 +220,16 @@ function setSyncStatus(kind) {
 
 // Combine what's on the server with what's in this browser: per item, the
 // most recently saved version wins. Local-only or newer-local entries stay
-// dirty so they get synced.
+// dirty so they get synced. Entries are keyed by item ID, so a rebuilt batch
+// never attaches an answer to a different item; old rows without an ID are
+// skipped.
 function mergeAnnotations(local, remote) {
   const merged = { ...local };
   for (const r of remote) {
-    const l = merged[r.itemIndex];
+    if (!r.itemId) continue;
+    const l = merged[r.itemId];
     if (!l || String(r.annotatedAt || "") >= String(l.annotatedAt || "")) {
-      merged[r.itemIndex] = { ...r, _rev: (l && l._rev) || 0, _dirty: false };
+      merged[r.itemId] = { ...r, _rev: (l && l._rev) || 0, _dirty: false };
     }
   }
   return merged;
@@ -273,9 +282,10 @@ async function startSession(annotator, batch, datasetKey) {
   if (!rows.length) throw new Error("empty_track");
   state.jokes =
     dataset.type === "text"
-      ? rows.map((row, i) => ({ index: i, text: row[dataset.itemColumn] || "" }))
+      ? rows.map((row, i) => ({ index: i, id: String(row[dataset.idColumn] || ""), text: row[dataset.itemColumn] || "" }))
       : rows.map((row, i) => ({
           index: i,
+          id: String(row[dataset.idColumn] || ""),
           mediaSrc: base + dataset.mediaBase + encodeURIComponent(row[dataset.itemColumn] || "") + (dataset.mediaExt || ""),
         }));
   const local = loadAnnotationsFromStorage(annotator, batch, datasetKey);
@@ -286,7 +296,7 @@ async function startSession(annotator, batch, datasetKey) {
 
   // Resume at the first un-annotated joke, or 0 if none started / all done.
   const firstUnannotated = state.jokes.findIndex(
-    (j) => !state.annotations[j.index] || !state.annotations[j.index].label
+    (j) => !state.annotations[j.id] || !state.annotations[j.id].label
   );
   state.currentIndex = firstUnannotated === -1 ? 0 : firstUnannotated;
 
@@ -343,7 +353,7 @@ function renderCurrent() {
       ? `العنصر ${state.currentIndex + 1} من ${state.jokes.length}`
       : `Item ${state.currentIndex + 1} of ${state.jokes.length}`;
 
-  const saved = state.annotations[joke.index] || {};
+  const saved = state.annotations[joke.id] || {};
   for (const id of FIELD_IDS) {
     const el = $(`f-${id}`);
     const key = toCamel(id);
@@ -383,12 +393,13 @@ function toCamel(kebab) {
 
 function saveCurrentFieldsToState() {
   const joke = state.jokes[state.currentIndex];
-  const entry = state.annotations[joke.index] || {};
+  const entry = state.annotations[joke.id] || {};
   for (const id of FIELD_IDS) {
     const el = $(`f-${id}`);
     const key = toCamel(id);
     entry[key] = el.value;
   }
+  entry.itemId = joke.id;
   entry.itemIndex = joke.index;
   if (currentDataset().type === "text") {
     entry.itemText = joke.text;
@@ -399,39 +410,20 @@ function saveCurrentFieldsToState() {
   entry.annotatedAt = new Date().toISOString();
   entry._rev = (entry._rev || 0) + 1;
   entry._dirty = true;
-  state.annotations[joke.index] = entry;
+  state.annotations[joke.id] = entry;
   persistAnnotations();
   updateProgress();
   scheduleSync();
 }
 
 // --- per-item timing ---
-// Records how long annotators spend on each item so very fast (likely
-// careless) annotations can be spotted later. Stored on each entry:
-//   timeSpentSec   wall-clock time the item was on screen, summed over visits
-//   activeTimeSec  same, but only while the tab is visible and the annotator
-//                  isn't idle (no input for IDLE_MS); a playing video counts
-//                  as active since watching involves no input
-//   visits         how many times the item was opened
-//   firstOpenedAt  ISO time of the first visit
-//   video items:   videoPlayed, videoWatchedSec, videoDurationSec
-// Time accumulates since the last flush, so saving mid-visit and again on
-// leaving never double-counts.
-const IDLE_MS = 60 * 1000;
-const TICK_MS = 1000;
+// timeSpentSec on each entry = total time the item was open on screen,
+// summed over every visit. Measured from timestamps, so it stays correct
+// even when the browser slows down page timers. Time accumulates since the
+// last flush, so saving mid-visit and again on leaving never double-counts.
 
 function startItemTimer() {
-  const now = performance.now();
-  state.timing = {
-    lastFlush: now,
-    lastTick: now,
-    activeMs: 0,
-    videoMs: 0,
-    videoPlayed: false,
-    visitCounted: false,
-    openedAt: new Date().toISOString(),
-  };
-  lastActivity = now;
+  state.timing = { lastFlush: performance.now() };
 }
 
 function stopItemTimer() {
@@ -441,64 +433,19 @@ function stopItemTimer() {
 function flushTiming(entry) {
   const t = state.timing;
   if (!t) return;
-  tick();
   const now = performance.now();
   entry.timeSpentSec = round1((entry.timeSpentSec || 0) + (now - t.lastFlush) / 1000);
-  entry.activeTimeSec = round1((entry.activeTimeSec || 0) + t.activeMs / 1000);
-  if (!t.visitCounted) {
-    entry.visits = (entry.visits || 0) + 1;
-    t.visitCounted = true;
-  }
-  if (!entry.firstOpenedAt) entry.firstOpenedAt = t.openedAt;
-  if (currentDataset().type === "video") {
-    const video = $("joke-video");
-    entry.videoPlayed = Boolean(entry.videoPlayed || t.videoPlayed);
-    entry.videoWatchedSec = round1((entry.videoWatchedSec || 0) + t.videoMs / 1000);
-    if (isFinite(video.duration)) entry.videoDurationSec = round1(video.duration);
-  }
   t.lastFlush = now;
-  t.activeMs = 0;
-  t.videoMs = 0;
-}
-
-let lastActivity = performance.now();
-let lastVideoTime = null;
-
-function videoPlaying() {
-  const video = $("joke-video");
-  return currentDataset() && currentDataset().type === "video" && !video.paused && !video.ended;
-}
-
-function tick() {
-  const t = state.timing;
-  if (!t) return;
-  const now = performance.now();
-  // Cap the step so a throttled background tab can't add a big jump at once.
-  const delta = Math.min(now - t.lastTick, 2 * TICK_MS);
-  t.lastTick = now;
-  const visible = document.visibilityState === "visible";
-  if (visible && (now - lastActivity < IDLE_MS || videoPlaying())) t.activeMs += delta;
 }
 
 function round1(x) {
   return Math.round(x * 10) / 10;
 }
 
-setInterval(tick, TICK_MS);
-
-for (const ev of ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "input"]) {
-  document.addEventListener(ev, () => { lastActivity = performance.now(); }, { passive: true, capture: true });
-}
-
 document.addEventListener("visibilitychange", () => {
-  if (!state.timing) return;
-  if (document.visibilityState === "hidden") {
-    tick();
+  if (state.timing && document.visibilityState === "hidden") {
     saveCurrentFieldsToState(); // don't lose time if the tab is closed while hidden
     beaconSync();
-  } else {
-    state.timing.lastTick = performance.now(); // hidden time is not active time
-    lastActivity = performance.now();
   }
 });
 
@@ -507,18 +454,16 @@ window.addEventListener("pagehide", () => {
   beaconSync();
 });
 
-$("joke-video").addEventListener("play", () => {
-  if (state.timing) state.timing.videoPlayed = true;
-  lastVideoTime = $("joke-video").currentTime;
-});
-$("joke-video").addEventListener("timeupdate", () => {
-  const video = $("joke-video");
-  if (!state.timing || video.paused || video.seeking) return;
-  const d = lastVideoTime === null ? 0 : video.currentTime - lastVideoTime;
-  if (d > 0 && d < 1.5) state.timing.videoMs += d * 1000; // ignore seeks/jumps
-  lastVideoTime = video.currentTime;
-});
-$("joke-video").addEventListener("seeked", () => { lastVideoTime = $("joke-video").currentTime; });
+// Manual "Sync now": saves the item on screen and re-sends every entry of the
+// open track, so the Sheet is guaranteed to have all of it (duplicates are
+// harmless: the latest row per item wins).
+function forceSync() {
+  saveCurrentFieldsToState();
+  for (const a of Object.values(state.annotations)) if (a) a._dirty = true;
+  persistAnnotations();
+  clearTimeout(syncTimer);
+  syncNow();
+}
 
 function updateProgress() {
   const total = state.jokes.length;
@@ -686,3 +631,4 @@ $("switch-btn").addEventListener("click", () => {
 });
 
 $("export-btn").addEventListener("click", exportJSON);
+$("sync-btn").addEventListener("click", forceSync);

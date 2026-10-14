@@ -26,7 +26,7 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
 - **Google Sheet "Annotations DB"** (private, owner only):
   https://docs.google.com/spreadsheets/d/1TfdLguarBB7gGzm-bB280ok5Xs1GoihNrpc5JDfpUaQ
   - `annotators`: `annotator_id | display_name | password | active | language` (language = `english`/`arabic`). Adding a row adds the annotator to the site dropdown, no push needed.
-  - `annotations`: append-only; one row per save. The **latest row per (annotator, batch, dataset, item_index) is the current answer**; older rows are history. Includes all schema fields, timing fields, and a `raw_json` copy of the entry.
+  - `annotations`: append-only; one row per save. The **latest row per (annotator, batch, dataset, item_id) is the current answer**; older rows are history. Includes all schema fields, `time_spent_sec`, and a `raw_json` copy of the entry. Rows are written by the Sheet's own header names (missing columns get appended), so old unused columns just stay empty. Old rows without `item_id` are ignored by load and export.
   - `log`: logins, bad passwords, lockouts, wrong-language attempts, errors.
 - **Apps Script** (`apps_script/Code.gs` is the copy of record; it's pasted into the Sheet via Extensions → Apps Script). Deployed as a web app, Execute as: Me, Access: Anyone:
   https://script.google.com/macros/s/AKfycbyT7qIUSRt-SQX0Hbow3rRw99cymZJR3vmE7XqODja8Xodzewn8pAvihmomfOp72EAk1w/exec
@@ -112,12 +112,18 @@ Key rule: **if `label` = Safe, then `harm_category`, `harm_culture`, and
 
 ## Timing (quality monitoring, recorded silently)
 
-Per item, accumulated across visits: `timeSpentSec` (on screen),
-`activeTimeSec` (tab visible and input within the last 60s, or video
-playing), `visits`, `firstOpenedAt`, `annotatedAt`; video items also
-`videoPlayed`, `videoWatchedSec` (seeks excluded), `videoDurationSec`.
+One value per item: `timeSpentSec` = total time the item was open on screen,
+summed over every visit (timestamp-based, so browser timer throttling doesn't
+affect it). Plus `annotatedAt`. Items only opened (no answers) are saved too,
+with empty fields and their time.
 
 ## Sync details
+
+Annotations are keyed by **item ID** (`item_id` for text, `video_name`,
+`post id`), not by position, so rebuilding a batch can't attach an answer to a
+different item. localStorage key: `jokes_annotations_v3__<batch>__<dataset>__<annotator>`.
+The **Sync now** button in the top bar marks every entry of the open track
+dirty and re-sends them all.
 
 Entries carry local-only `_rev`/`_dirty` fields (stripped before sending).
 Saves are debounced (2s) and retried every 15s on failure; `sendBeacon` on
