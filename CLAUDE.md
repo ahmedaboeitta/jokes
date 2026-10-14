@@ -114,7 +114,7 @@ Key rule: **if `label` = Safe, then `harm_category`, `harm_culture`, and
 
 One value per item: `timeSpentSec` = total time the item was open on screen,
 summed over every visit (timestamp-based, so browser timer throttling doesn't
-affect it). Plus `annotatedAt`. Items only opened (no answers) are saved too,
+affect it). The clock pauses while the browser tab is hidden. Plus `annotatedAt`. Items only opened (no answers) are saved too,
 with empty fields and their time.
 
 ## Sync details

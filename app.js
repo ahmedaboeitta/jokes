@@ -421,9 +421,10 @@ function saveCurrentFieldsToState() {
 // summed over every visit. Measured from timestamps, so it stays correct
 // even when the browser slows down page timers. Time accumulates since the
 // last flush, so saving mid-visit and again on leaving never double-counts.
+// The clock pauses while the browser tab is hidden (another tab, minimized).
 
 function startItemTimer() {
-  state.timing = { lastFlush: performance.now() };
+  state.timing = { lastFlush: performance.now(), paused: document.visibilityState === "hidden" };
 }
 
 function stopItemTimer() {
@@ -434,7 +435,7 @@ function flushTiming(entry) {
   const t = state.timing;
   if (!t) return;
   const now = performance.now();
-  entry.timeSpentSec = round1((entry.timeSpentSec || 0) + (now - t.lastFlush) / 1000);
+  if (!t.paused) entry.timeSpentSec = round1((entry.timeSpentSec || 0) + (now - t.lastFlush) / 1000);
   t.lastFlush = now;
 }
 
@@ -443,9 +444,14 @@ function round1(x) {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (state.timing && document.visibilityState === "hidden") {
+  if (!state.timing) return;
+  if (document.visibilityState === "hidden") {
     saveCurrentFieldsToState(); // don't lose time if the tab is closed while hidden
+    state.timing.paused = true;
     beaconSync();
+  } else {
+    state.timing.paused = false;
+    state.timing.lastFlush = performance.now();
   }
 });
 
