@@ -20,8 +20,10 @@
 //   save   {annotatorId, password, batch, dataset, entries: [entry, ...]}
 //   load   {annotatorId, password, batch, dataset} -> {entries: [latest per item]}
 //
-// It also builds tidy per-annotator CSV files in Drive (see buildFolders):
-// from the Sheet menu "Annotations", and nightly once the trigger is on.
+// It also builds tidy per-annotator CSV files in Drive (see buildFolders),
+// nightly, and a "progress" tab (see refreshProgress), hourly. Both can be
+// run from the Sheet menu "Annotations"; "Turn on automatic updates" sets
+// up the triggers.
 
 const MAX_FAILS = 10;           // failed logins per annotator before a lockout
 const LOCKOUT_SECONDS = 15 * 60;
@@ -29,6 +31,10 @@ const LOCKOUT_SECONDS = 15 * 60;
 const ROOT_FOLDER_ID = "1ZW0XqFmVcg7jYZPDkr92MRdZanhns2lD"; // "jokes annotations"
 const OUTPUT_FOLDER = "Annotations";
 const NIGHTLY_HOUR = 2; // runs between 2 and 3 am, script time zone
+
+// The public site: released batches are read from its app.js and item counts
+// from its batch CSVs, so the progress tab never needs editing by hand.
+const SITE_URL = "https://ahmedaboeitta.github.io/jokes/";
 
 // Website dataset key -> language it belongs to.
 const DATASET_LANGUAGE = {
@@ -38,6 +44,16 @@ const DATASET_LANGUAGE = {
   images_arabic: "arabic",
   videos_english: "english",
   videos_arabic: "arabic",
+};
+
+// Website dataset key -> item CSV inside batches/batch_XX/ (as in app.js).
+const DATASET_FILES = {
+  english: "text/english.csv",
+  arabic: "text/arabic.csv",
+  images_english: "images/english.csv",
+  images_arabic: "images/arabic.csv",
+  videos_english: "videos/english.csv",
+  videos_arabic: "videos/arabic.csv",
 };
 
 // Website dataset keys -> file name prefix.
@@ -222,7 +238,8 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Annotations")
     .addItem("Build folders now", "buildFoldersFromMenu")
-    .addItem("Turn on nightly build", "installNightlyTrigger")
+    .addItem("Refresh progress now", "refreshProgressFromMenu")
+    .addItem("Turn on automatic updates", "installTriggers")
     .addToUi();
 }
 
@@ -231,12 +248,19 @@ function buildFoldersFromMenu() {
   SpreadsheetApp.getUi().alert("Done: " + n + " file(s) written to " + OUTPUT_FOLDER + "/.");
 }
 
-function installNightlyTrigger() {
+// Drive folders nightly, progress tab hourly. Safe to run again: old
+// triggers for these functions are replaced, not duplicated.
+function installTriggers() {
   for (const t of ScriptApp.getProjectTriggers()) {
-    if (t.getHandlerFunction() === "buildFolders") ScriptApp.deleteTrigger(t);
+    if (["buildFolders", "refreshProgress"].indexOf(t.getHandlerFunction()) !== -1) {
+      ScriptApp.deleteTrigger(t);
+    }
   }
   ScriptApp.newTrigger("buildFolders").timeBased().everyDays(1).atHour(NIGHTLY_HOUR).create();
-  SpreadsheetApp.getUi().alert("Nightly build is on (every day around " + NIGHTLY_HOUR + ":00).");
+  ScriptApp.newTrigger("refreshProgress").timeBased().everyHours(1).create();
+  SpreadsheetApp.getUi().alert(
+    "Automatic updates are on: folders every day around " + NIGHTLY_HOUR + ":00, progress every hour."
+  );
 }
 
 function buildFolders() {
@@ -305,6 +329,86 @@ function csvField(v) {
   if (v instanceof Date) v = v.toISOString();
   const s = String(v === null || v === undefined ? "" : v);
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// --- progress tab ---
+// One row per active annotator x released batch x track of their language
+// (tracks with no items yet are left out): done = items with a label,
+// total = items in that batch's CSV on the site.
+
+function refreshProgressFromMenu() {
+  const n = refreshProgress();
+  SpreadsheetApp.getUi().alert("Done: progress updated (" + n + " row(s)).");
+}
+
+function refreshProgress() {
+  const batches = releasedBatches();
+
+  // Items in each released batch/track.
+  const totals = {};
+  for (const batch of batches) {
+    for (const dataset of Object.keys(DATASET_FILES)) {
+      const url = SITE_URL + "batches/" + batch + "/" + DATASET_FILES[dataset];
+      const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+      if (res.getResponseCode() !== 200) continue;
+      const rows = Utilities.parseCsv(res.getContentText("UTF-8"))
+        .filter((r) => r.some((c) => String(c).trim()));
+      totals[batch + "|" + dataset] = Math.max(rows.length - 1, 0);
+    }
+  }
+
+  // Latest row per item; count the ones with a label.
+  const values = annotationsSheet().getDataRange().getValues();
+  const header = values[0].map(String);
+  const col = (name) => header.indexOf(name);
+  const [cId, cBatch, cDataset, cItem, cLabel] =
+    ["annotator_id", "batch", "dataset", "item_id", "label"].map(col);
+  const latest = {};
+  if (cItem !== -1) {
+    for (const r of values.slice(1)) {
+      if (!String(r[cId]) || String(r[cItem]) === "") continue;
+      latest[[r[cId], r[cBatch], r[cDataset], r[cItem]].join("|")] = String(r[cLabel]).trim() !== "";
+    }
+  }
+  const done = {};
+  for (const k of Object.keys(latest)) {
+    if (!latest[k]) continue;
+    const g = k.split("|").slice(0, 3).join("|");
+    done[g] = (done[g] || 0) + 1;
+  }
+
+  const out = [["annotator", "language", "batch", "track", "done", "total", "%"]];
+  for (const a of annotatorRows()) {
+    if (!a.active) continue;
+    for (const batch of batches) {
+      for (const dataset of Object.keys(DATASET_FILES)) {
+        if (DATASET_LANGUAGE[dataset] !== a.language) continue;
+        const total = totals[batch + "|" + dataset];
+        if (!total) continue;
+        const n = done[[a.id, batch, dataset].join("|")] || 0;
+        out.push([a.id, a.language, batch, DATASET_NAMES[dataset], n, total, n / total]);
+      }
+    }
+  }
+
+  let sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("progress");
+  if (!sh) sh = SpreadsheetApp.getActiveSpreadsheet().insertSheet("progress");
+  sh.clear();
+  sh.getRange(1, 1, out.length, out[0].length).setValues(out);
+  if (out.length > 1) sh.getRange(2, 7, out.length - 1, 1).setNumberFormat("0%");
+  sh.getRange(1, 1, 1, out[0].length).setFontWeight("bold");
+  sh.setFrozenRows(1);
+  sh.getRange(1, 9, 1, 2).setValues([["last refreshed", new Date()]]);
+  return out.length - 1;
+}
+
+// Batch folder names from RELEASED_BATCHES in the site's app.js.
+function releasedBatches() {
+  const js = UrlFetchApp.fetch(SITE_URL + "app.js").getContentText();
+  const m = js.match(/RELEASED_BATCHES\s*=\s*\[([^\]]*)\]/);
+  if (!m) throw new Error("RELEASED_BATCHES not found in app.js");
+  return m[1].split(",").map((x) => x.trim()).filter(Boolean)
+    .map((n) => "batch_" + ("0" + Number(n)).slice(-2));
 }
 
 // --- helpers ---

@@ -28,6 +28,7 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
   - `annotators`: `annotator_id | display_name | password | active | language` (language = `english`/`arabic`). Adding a row adds the annotator to the site dropdown, no push needed.
   - `annotations`: append-only; one row per save. The **latest row per (annotator, batch, dataset, item_id) is the current answer**; older rows are history. Includes all schema fields, `time_spent_sec`, and a `raw_json` copy of the entry. Rows are written by the Sheet's own header names (missing columns get appended), so old unused columns just stay empty. Old rows without `item_id` are ignored by load and export.
   - `log`: logins, bad passwords, lockouts, wrong-language attempts, errors.
+  - `progress`: written by `refreshProgress()` (hourly + menu **Annotations → Refresh progress now**). One row per active annotator × released batch × track of their language: `annotator | language | batch | track | done | total | %`. done = items whose latest row has a label; total = rows in the batch CSV fetched from the live site; released batches are parsed from `RELEASED_BATCHES` in the live `app.js`. Tracks with 0 items are left out.
 - **Apps Script** (`apps_script/Code.gs` is the copy of record; it's pasted into the Sheet via Extensions → Apps Script). Deployed as a web app, Execute as: Me, Access: Anyone:
   https://script.google.com/macros/s/AKfycbyT7qIUSRt-SQX0Hbow3rRw99cymZJR3vmE7XqODja8Xodzewn8pAvihmomfOp72EAk1w/exec
   - Actions: `annotators`, `login`, `save`, `load`. The password is checked on **every** request (the URL is public in `app.js`). 10 wrong attempts lock the account for 15 minutes. Save/load refuse datasets outside the annotator's language.
@@ -36,8 +37,8 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
 - **Drive export:** `buildFolders()` writes
   `jokes annotations/Annotations/<English|Arabic>_annotators/<annotator_id>/<Language>_<Type>_batchXX.csv`
   (latest answer per item, overwritten each run). Run from the Sheet menu
-  **Annotations → Build folders now**, and nightly (~2am) via the trigger set by
-  **Annotations → Turn on nightly build**. Drive folder:
+  **Annotations → Build folders now**, and nightly (~2am) via the triggers set by
+  **Annotations → Turn on automatic updates** (also sets the hourly progress refresh). Drive folder:
   https://drive.google.com/drive/folders/1ZW0XqFmVcg7jYZPDkr92MRdZanhns2lD
 - **Passwords live only in the Sheet**, never in the repo.
 
