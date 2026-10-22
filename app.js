@@ -80,7 +80,7 @@ const FIELD_IDS = [
   "target",
   "humor-mechanism",
   "confidence",
-  "joke-summary",
+  "why-we-laugh",
   "why",
 ];
 
@@ -359,7 +359,7 @@ function renderCurrent() {
     const key = toCamel(id);
     el.value = saved[key] !== undefined ? saved[key] : "";
   }
-  applySafeLock();
+  applyLocks();
 
   startItemTimer();
 
@@ -367,22 +367,36 @@ function renderCurrent() {
   $("next-btn").disabled = state.currentIndex === state.jokes.length - 1;
 }
 
-// Fields that don't apply once a joke is labeled Safe: force them to "safe"
-// and lock them so the annotator can't fill in a harm category/culture/
-// severity for something that isn't harmful. Unlocking (label != safe)
-// clears any auto-set "safe" value so the annotator has to actively choose.
-const SAFE_LOCKED_IDS = ["harm-category", "harm-culture", "severity"];
+// Fields that don't apply once an item is labeled Safe are forced to their
+// "not applicable" value and locked: explicitness -> None, harm category/
+// culture/severity -> Safe. On text and image tracks, harm culture is also
+// locked to the track's language when the item isn't Safe (videos are mixed,
+// so there the annotator chooses). Unlocking (label changed away from Safe)
+// clears the auto-set values so the annotator has to actively choose.
+const SAFE_VALUES = {
+  "explicitness": "none",
+  "harm-category": "safe",
+  "harm-culture": "safe",
+  "severity": "safe",
+};
 
-function applySafeLock() {
+function applyLocks(labelChanged = false) {
   const isSafe = $("f-label").value === "safe";
-  for (const id of SAFE_LOCKED_IDS) {
+  const dataset = currentDataset();
+  const fixedCulture = dataset && dataset.type !== "video" ? dataset.uiLang : null;
+  for (const [id, safeValue] of Object.entries(SAFE_VALUES)) {
     const el = $(`f-${id}`);
     if (isSafe) {
-      el.value = "safe";
+      el.value = safeValue;
+      el.disabled = true;
+    } else if (id === "harm-culture" && fixedCulture) {
+      el.value = fixedCulture;
       el.disabled = true;
     } else {
       el.disabled = false;
-      if (el.value === "safe") el.value = "";
+      // "None" is a valid explicitness choice, so only clear it when the
+      // label has just changed away from Safe.
+      if (el.value === safeValue && (labelChanged || id !== "explicitness")) el.value = "";
     }
   }
 }
@@ -623,7 +637,7 @@ $("next-btn").addEventListener("click", () => goTo(1));
 
 for (const id of FIELD_IDS) {
   $(`f-${id}`).addEventListener("change", () => {
-    if (id === "label") applySafeLock();
+    if (id === "label") applyLocks(true);
     saveCurrentFieldsToState();
   });
 }

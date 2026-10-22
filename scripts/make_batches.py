@@ -1,18 +1,26 @@
 """Build the annotation batches from source_data/.
 
-Selection rule: items where at least 2 of the 4 models (GPT-4o, GPT-5 /
-GPT-5 Pro, Gemini 2.5 Pro, Gemini 3 Pro) predicted the wrong harmful/safe
-label. Universal videos (>=2 wrong) are split randomly in half between the
-English and Arabic pools. Each pool is shuffled and cut into batches of 100
-per type; the last batch holds the rest (e.g. 332 -> 100/100/100/32). Every
-pool item is used exactly once.
+Selection rule: items where at least 2 of the models predicted the wrong
+harmful/safe label.
+  text:   GPT-4o, GPT-5, Gemini 2.5 Pro, Gemini 3 Pro (2 of 4)
+  videos: GPT-4o, GPT-5 Pro, Gemini 2.5 Pro, Gemini 3 Pro (2 of 4)
+  images: GPT-4o, GPT-5.2, Gemini 2.5 Pro (2 of 3; a missing prediction
+          counts as not wrong)
+Universal videos (>=2 wrong) are split randomly in half between the English
+and Arabic pools. Every pool item is used exactly once.
+
+Batches, per language: 400 items = 100 text + 100 videos + 200 images. When
+a type runs out, the gap is filled from images (then text, then videos), so
+every batch has 400 items except the last one.
 
 Outputs:
   batches/batch_0N/text/{english,arabic}.csv      public, what the site shows
   batches/batch_0N/videos/{english,arabic}.csv    (no labels in these files)
   batches/batch_0N/videos/files/*.mp4
-  batches/batch_0N/images/{english,arabic}.csv    header only until image
-                                                  model results exist
+  batches/batch_0N/images/{english,arabic}.csv
+  batches/batch_0N/images/files/*
+  batches/.gitignore                              keeps media of batches not
+                                                  in LIVE_MEDIA out of git
   source_data/selection/batches_manifest.csv      private: true labels,
                                                   models-wrong counts, sources
 
@@ -26,8 +34,17 @@ import random
 import shutil
 
 SEED = 42
-PER_BATCH = 100
+BATCH_SIZE = 400
+QUOTA = {"text": 100, "videos": 100, "images": 200}
+FILL_ORDER = ["images", "text", "videos"]
 MIN_WRONG = 2
+
+# Batches whose media (videos/images) is published. GitHub Pages caps the site
+# at 1 GB, so only these batches' files/ folders are committed; the rest are
+# listed in batches/.gitignore. The small CSVs of every batch are always
+# committed (the Sheet's progress tab reads them). To swap batches: edit this
+# list, re-run the script, commit, push.
+LIVE_MEDIA = [1]
 
 SRC = "source_data"
 OUT = "batches"
@@ -52,6 +69,9 @@ TEXT_MODELS = {
 TEXT_REFERENCE = 1  # gpt-5
 
 VIDEO_MODELS = ["gpt4o.csv", "gpt5_pro.csv", "gemini2.5_pro.csv", "gemini3_pro.csv"]
+
+IMAGE_MODELS = ["gpt4o.csv", "gpt5.2.csv", "gemini2.5_pro.csv"]
+IMAGE_LANGUAGES = {"en": "English", "ar": "Arabic"}
 
 
 def read_dicts(path):
@@ -128,9 +148,52 @@ def video_pools(rng):
     }
 
 
-def chunks(items, size):
-    """Consecutive chunks of `size`; the last one holds the rest."""
-    return [items[i:i + size] for i in range(0, len(items), size)]
+def image_pools():
+    """{"English": [...], "Arabic": [...]} with >= MIN_WRONG of 3 wrong.
+
+    labels.csv: post id, label (EXPLICIT / IMPLICIT / NO_DARK_HUMOUR), language.
+    Harmful = EXPLICIT or IMPLICIT. Model files: path, label (harmful /
+    non_harmful); a few images have no prediction from a model.
+    """
+    base = os.path.join(SRC, "image_data")
+    outputs = [
+        {r["path"].strip(): r["label"].strip().lower() for r in read_dicts(os.path.join(base, "model_outputs", f))}
+        for f in IMAGE_MODELS
+    ]
+    pools = {"English": [], "Arabic": []}
+    for r in read_dicts(os.path.join(base, "labels.csv")):
+        pid, label = r["post id"].strip(), r["label"].strip()
+        truth = "harmful" if label in ("EXPLICIT", "IMPLICIT") else "non_harmful"
+        wrong = sum(pid in o and o[pid] != truth for o in outputs)
+        lang = IMAGE_LANGUAGES[r["language"].strip()]
+        if wrong >= MIN_WRONG:
+            pools[lang].append({
+                "item_id": pid,
+                "item": pid,
+                "true_label": 1 if truth == "harmful" else 0,
+                "explicit": 1 if label == "EXPLICIT" else 0,
+                "models_wrong": wrong,
+                "source_language": lang,
+                "label_3class": label,
+            })
+    return pools
+
+
+def compose_batches(pools):
+    """Cut {kind: shuffled list} into batches of BATCH_SIZE using QUOTA, and
+    fill any shortfall in FILL_ORDER. Returns [{kind: [items]}, ...]."""
+    left = {k: list(v) for k, v in pools.items()}
+    batches = []
+    while any(left.values()):
+        take = {k: min(QUOTA[k], len(left[k])) for k in QUOTA}
+        for k in FILL_ORDER:
+            gap = BATCH_SIZE - sum(take.values())
+            if gap <= 0:
+                break
+            take[k] += min(gap, len(left[k]) - take[k])
+        batches.append({k: left[k][:n] for k, n in take.items()})
+        left = {k: left[k][n:] for k, n in take.items()}
+    return batches
 
 
 def main():
@@ -142,6 +205,17 @@ def main():
     vids = video_pools(rng)
     pools[("videos", "English")] = vids["English"]
     pools[("videos", "Arabic")] = vids["Arabic"]
+    # Text and video pools are shuffled exactly as before images existed, so
+    # their batches stay the same; images get their own random generator.
+    for key in sorted(pools):
+        pool = sorted(pools[key], key=lambda x: str(x["item_id"]))
+        rng.shuffle(pool)
+        pools[key] = pool
+    img_rng = random.Random(SEED)
+    for lang, pool in sorted(image_pools().items()):
+        pool = sorted(pool, key=lambda x: x["item_id"])
+        img_rng.shuffle(pool)
+        pools[("images", lang)] = pool
 
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
@@ -149,38 +223,42 @@ def main():
     n_batches = 0
     manifest = [[
         "batch", "dataset", "item_index", "item_id", "item", "true_label",
-        "explicit", "models_wrong", "source_language",
+        "explicit", "models_wrong", "source_language", "label_3class",
     ]]
-    for (kind, lang), pool in sorted(pools.items()):
-        pool = sorted(pool, key=lambda x: str(x["item_id"]))
-        rng.shuffle(pool)
+    for lang in ("English", "Arabic"):
         lang_key = lang.lower()
-        dataset = lang_key if kind == "text" else f"videos_{lang_key}"
-        parts = chunks(pool, PER_BATCH)
-        n_batches = max(n_batches, len(parts))
-        print(f"{kind:6} {lang:7} pool={len(pool):3} batches={[len(c) for c in parts]}")
-        for b, chunk in enumerate(parts, start=1):
-            folder = os.path.join(OUT, f"batch_{b:02d}", kind)
-            if kind == "text":
-                rows = [["item_id", "Jokes"]] + [[x["item_id"], x["item"]] for x in chunk]
-            else:
-                rows = [["video_name"]] + [[x["item_id"]] for x in chunk]
-                os.makedirs(os.path.join(folder, "files"), exist_ok=True)
-                for x in chunk:
-                    shutil.copy2(
-                        os.path.join(SRC, "video_data", "videos", x["item_id"] + ".mp4"),
-                        os.path.join(folder, "files"),
-                    )
-            write_rows(os.path.join(folder, f"{lang_key}.csv"), rows)
-            for i, x in enumerate(chunk):
-                manifest.append([
-                    f"batch_{b:02d}", dataset, i, x["item_id"], x["item"], x["true_label"],
-                    x["explicit"], x["models_wrong"], x["source_language"],
-                ])
+        batches = compose_batches({k: pools[(k, lang)] for k in QUOTA})
+        n_batches = max(n_batches, len(batches))
+        for b, parts in enumerate(batches, start=1):
+            print(f"{lang:7} batch_{b:02d}: " + ", ".join(f"{k} {len(parts[k])}" for k in QUOTA)
+                  + f" = {sum(len(v) for v in parts.values())}")
+            for kind, chunk in parts.items():
+                if not chunk:
+                    continue
+                folder = os.path.join(OUT, f"batch_{b:02d}", kind)
+                if kind == "text":
+                    rows = [["item_id", "Jokes"]] + [[x["item_id"], x["item"]] for x in chunk]
+                    dataset = lang_key
+                else:
+                    if kind == "videos":
+                        rows = [["video_name"]] + [[x["item_id"]] for x in chunk]
+                        src, ext = os.path.join(SRC, "video_data", "videos"), ".mp4"
+                    else:
+                        rows = [["post id"]] + [[x["item_id"]] for x in chunk]
+                        src, ext = os.path.join(SRC, "image_data", "images"), ""
+                    dataset = f"{kind}_{lang_key}"
+                    os.makedirs(os.path.join(folder, "files"), exist_ok=True)
+                    for x in chunk:
+                        shutil.copy2(os.path.join(src, x["item_id"] + ext), os.path.join(folder, "files"))
+                write_rows(os.path.join(folder, f"{lang_key}.csv"), rows)
+                for i, x in enumerate(chunk):
+                    manifest.append([
+                        f"batch_{b:02d}", dataset, i, x["item_id"], x["item"], x["true_label"],
+                        x["explicit"], x["models_wrong"], x["source_language"], x.get("label_3class", ""),
+                    ])
 
-    # Header-only CSVs for any track a batch doesn't have (pool ran out, or
-    # no image model results yet), so the site shows "no items" instead of
-    # failing to load the file.
+    # Header-only CSVs for any track a batch doesn't have (pool ran out), so
+    # the site shows "no items" instead of failing to load the file.
     headers = {"text": ["item_id", "Jokes"], "videos": ["video_name"], "images": ["post id"]}
     for b in range(1, n_batches + 1):
         for kind, header in headers.items():
@@ -188,6 +266,13 @@ def main():
                 path = os.path.join(OUT, f"batch_{b:02d}", kind, f"{lang_key}.csv")
                 if not os.path.exists(path):
                     write_rows(path, [header])
+
+    with open(os.path.join(OUT, ".gitignore"), "w") as f:
+        f.write("# Written by scripts/make_batches.py (LIVE_MEDIA). Media of batches that\n"
+                "# aren't live is kept out of git to stay under the 1 GB Pages limit.\n")
+        for b in range(1, n_batches + 1):
+            if b not in LIVE_MEDIA:
+                f.write(f"/batch_{b:02d}/*/files/\n")
 
     write_rows(MANIFEST, manifest)
     print(f"manifest: {MANIFEST} ({len(manifest) - 1} items)")

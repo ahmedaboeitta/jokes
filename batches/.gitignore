@@ -1,0 +1,5 @@
+# Written by scripts/make_batches.py (LIVE_MEDIA). Media of batches that
+# aren't live is kept out of git to stay under the 1 GB Pages limit.
+/batch_02/*/files/
+/batch_03/*/files/
+/batch_04/*/files/
