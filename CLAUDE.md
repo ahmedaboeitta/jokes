@@ -61,8 +61,8 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
   - `video_data/results/videos_models_wrong.csv`.
   - `image_data/images/` (6,006 files), `image_data/labels.csv` (`post id, label, language`; label = `EXPLICIT`/`IMPLICIT`/`NO_DARK_HUMOUR`, language = `en`/`ar`; 3,003 harmful / 3,003 safe). This is the corrected V2 set (received 2026-10-21 as `Final_Dataset_V2`): same images as before, 63 labels changed.
   - `image_data/model_outputs/{gpt4o,gpt5.2,gemini2.5_pro}.csv` (`path, label` = harmful/non_harmful, `explanation`, ...). GPT-4o misses 3 images, GPT-5.2 misses 4. `model_outputs/open_source/<model>/` has 7 open-source models (not used for selection). `image_data/eval_harmful_from_predictions.py` came with the data.
-  - `_old_image_data_v1/`: the previous image labels/images, superseded; can be deleted.
   - `selection/batches_manifest.csv`: per batch item: true label, explicit, models_wrong, source_language.
+- `private/`: **git-ignored**. `annotators.tsv` = the real annotators' usernames, passwords, languages and emails (same logins as the Sheet's `annotators` tab).
 - `Move from harmful.docx`: the user's research-plan notes (placement undecided).
 
 ## Sample selection (current batches)
@@ -155,5 +155,6 @@ screen itself is English only.
 
 ## Known open items
 
-- `hesham` is the test annotator (English). Test data was cleared on 2026-10-14; delete any new `hesham` rows/files before real annotation starts if needed.
+- Real annotators added 2026-10-25: English `salisu`, `arslan`, `ansuman`; Arabic `amina`, `taher`, `zohra`, `khayra` (logins in `private/annotators.tsv`).
+- `hesham` (English) and `heshamm` (Arabic) are test annotators, kept on purpose for further testing, along with hesham's test rows in the Sheet.
 - Once, a `load` was rejected as bad_credentials right after a successful login; not reproduced since.

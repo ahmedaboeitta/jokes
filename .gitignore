@@ -5,3 +5,6 @@
 
 .DS_Store
 __pycache__/
+
+# Annotator logins (passwords), never commit
+private/
