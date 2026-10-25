@@ -8,7 +8,10 @@
 // older rows are kept as history.
 //
 // Tabs: annotators (annotator_id | display_name | password | active | language),
-//       annotations (headers written automatically), log.
+//       annotations (headers written automatically), log,
+//       latest (one row per item, the current answer; kept up to date by save
+//       so load doesn't have to scan the whole history; created and filled
+//       from annotations automatically, or via the menu "Rebuild latest").
 //
 // Requests from the website are POSTs with a text/plain JSON body (avoids a
 // CORS preflight, which Apps Script can't answer). Actions:
@@ -193,6 +196,7 @@ function save(req) {
       header.map((name) => (COLUMN_GETTERS[name] ? cell(COLUMN_GETTERS[name](entry, ctx)) : ""))
     );
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, header.length).setValues(rows);
+    upsertLatest(entries, ctx);
   } finally {
     lock.releaseLock();
   }
@@ -204,29 +208,101 @@ function load(req) {
   if (auth.error) return auth.error;
   const langError = checkLanguage(auth.annotator, req.dataset);
   if (langError) return langError;
-  const sh = annotationsSheet();
-  const all = sh.getDataRange().getValues();
-  const header = all[0];
-  const values = all.slice(1);
-  const col = (name) => header.indexOf(name);
-  const [cId, cBatch, cDataset, cItem, cRaw] =
-    ["annotator_id", "batch", "dataset", "item_id", "raw_json"].map(col);
-  if (cItem === -1) return { ok: true, entries: [] };
-
-  // Rows are appended in time order, so a later row overwrites an earlier one.
-  // Old rows without an item_id are skipped.
-  const latest = {};
+  const sh = latestSheet();
+  if (sh.getLastRow() < 2) return { ok: true, entries: [] };
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, LATEST_COLUMNS.length).getValues();
+  const entries = [];
   for (const r of values) {
-    if (String(r[cId]) !== auth.annotator.id) continue;
-    if (String(r[cBatch]) !== String(req.batch) || String(r[cDataset]) !== String(req.dataset)) continue;
-    if (String(r[cItem]) === "") continue;
+    if (String(r[1]) !== auth.annotator.id) continue;
+    if (String(r[2]) !== String(req.batch) || String(r[3]) !== String(req.dataset)) continue;
     try {
-      latest[String(r[cItem])] = JSON.parse(r[cRaw]);
+      entries.push(JSON.parse(r[6]));
     } catch (err) {
       // skip a damaged row rather than failing the whole load
     }
   }
-  return { ok: true, entries: Object.values(latest) };
+  return { ok: true, entries };
+}
+
+// --- latest tab: one row per (annotator, batch, dataset, item_id) ---
+
+const LATEST_COLUMNS = ["key", "annotator_id", "batch", "dataset", "item_id", "annotated_at", "raw_json"];
+
+function latestKey(annotatorId, batch, dataset, itemId) {
+  return [annotatorId, batch, dataset, itemId].join("|");
+}
+
+// The latest tab; created (and filled from annotations) if it doesn't exist.
+function latestSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("latest");
+  if (sh) return sh;
+  rebuildLatest();
+  return ss.getSheetByName("latest");
+}
+
+// Called from save (inside its lock): overwrite each item's row, or append it.
+function upsertLatest(entries, ctx) {
+  const sh = latestSheet();
+  const n = sh.getLastRow() - 1;
+  const rowOf = {};
+  if (n > 0) {
+    sh.getRange(2, 1, n, 1).getValues().forEach((r, i) => { rowOf[String(r[0])] = i + 2; });
+  }
+  const appended = {}; // key -> row values, so a key repeated in one request keeps the last
+  for (const entry of entries) {
+    if (!entry || !entry.itemId) continue;
+    const itemId = String(entry.itemId);
+    const key = latestKey(ctx.annotatorId, ctx.batch, ctx.dataset, itemId);
+    const row = [key, ctx.annotatorId, ctx.batch, ctx.dataset, itemId,
+      String(entry.annotatedAt || ""), JSON.stringify(entry)];
+    if (rowOf[key]) sh.getRange(rowOf[key], 1, 1, row.length).setValues([row]);
+    else appended[key] = row;
+  }
+  const rows = Object.values(appended);
+  if (rows.length) {
+    // Plain text, so IDs like "1747" or dates aren't turned into numbers/dates.
+    const range = sh.getRange(sh.getLastRow() + 1, 1, rows.length, LATEST_COLUMNS.length);
+    range.setNumberFormat("@").setValues(rows);
+  }
+}
+
+// Rebuilds the latest tab from the full annotations history. Runs by itself
+// the first time; run it from the menu after editing annotations by hand.
+function rebuildLatest() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("latest") || ss.insertSheet("latest");
+  const all = annotationsSheet().getDataRange().getValues();
+  const header = all[0].map(String);
+  const col = (name) => header.indexOf(name);
+  const [cId, cBatch, cDataset, cItem, cAt, cRaw] =
+    ["annotator_id", "batch", "dataset", "item_id", "annotated_at", "raw_json"].map(col);
+  const latest = {};
+  if (cItem !== -1) {
+    for (const r of all.slice(1)) {
+      if (!String(r[cId]) || String(r[cItem]) === "") continue;
+      const key = latestKey(String(r[cId]), String(r[cBatch]), String(r[cDataset]), String(r[cItem]));
+      const at = r[cAt] instanceof Date ? r[cAt].toISOString() : String(r[cAt]);
+      latest[key] = [key, String(r[cId]), String(r[cBatch]), String(r[cDataset]), String(r[cItem]), at, String(r[cRaw])];
+    }
+  }
+  const rows = [LATEST_COLUMNS].concat(Object.values(latest));
+  sh.clear();
+  sh.getRange(1, 1, rows.length, LATEST_COLUMNS.length).setNumberFormat("@").setValues(rows);
+  sh.setFrozenRows(1);
+  return rows.length - 1;
+}
+
+function rebuildLatestFromMenu() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let n;
+  try {
+    n = rebuildLatest();
+  } finally {
+    lock.releaseLock();
+  }
+  SpreadsheetApp.getUi().alert("Done: latest tab rebuilt (" + n + " item(s)).");
 }
 
 // --- Drive export ---
@@ -239,6 +315,7 @@ function onOpen() {
     .createMenu("Annotations")
     .addItem("Build folders now", "buildFoldersFromMenu")
     .addItem("Refresh progress now", "refreshProgressFromMenu")
+    .addItem("Rebuild latest", "rebuildLatestFromMenu")
     .addItem("Turn on automatic updates", "installTriggers")
     .addToUi();
 }

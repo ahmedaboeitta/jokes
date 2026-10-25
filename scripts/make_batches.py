@@ -1,17 +1,18 @@
 """Build the annotation batches from source_data/.
 
-Selection rule: items where at least 2 of the models predicted the wrong
-harmful/safe label.
-  text:   GPT-4o, GPT-5, Gemini 2.5 Pro, Gemini 3 Pro (2 of 4)
-  videos: GPT-4o, GPT-5 Pro, Gemini 2.5 Pro, Gemini 3 Pro (2 of 4)
-  images: GPT-4o, GPT-5.2, Gemini 2.5 Pro (2 of 3; a missing prediction
-          counts as not wrong)
-Universal videos (>=2 wrong) are split randomly in half between the English
-and Arabic pools. Every pool item is used exactly once.
+Selection rule: items where enough models predicted the wrong harmful/safe
+label.
+  text:   GPT-4o, GPT-5, Gemini 2.5 Pro, Gemini 3 Pro       at least 1 of 4
+  videos: GPT-4o, GPT-5 Pro, Gemini 2.5 Pro, Gemini 3 Pro   at least 1 of 4
+  images: GPT-4o, GPT-5.2, Gemini 2.5 Pro                   at least 2 of 3
+          (a missing prediction counts as not wrong)
+Universal videos that qualify are split randomly in half between the
+English and Arabic pools. Every pool item is used exactly once.
 
 Batches, per language: 400 items = 100 text + 100 videos + 200 images. When
 a type runs out, the gap is filled from images (then text, then videos), so
-every batch has 400 items except the last one.
+every batch has 400 items except the last one. A last batch smaller than
+MERGE_BELOW is merged into the one before it.
 
 Outputs:
   batches/batch_0N/text/{english,arabic}.csv      public, what the site shows
@@ -37,7 +38,9 @@ SEED = 42
 BATCH_SIZE = 400
 QUOTA = {"text": 100, "videos": 100, "images": 200}
 FILL_ORDER = ["images", "text", "videos"]
-MIN_WRONG = 2
+MERGE_BELOW = 50
+MIN_WRONG = 1         # text and videos
+MIN_WRONG_IMAGES = 2
 
 # Batches whose media (videos/images) is published. GitHub Pages caps the site
 # at 1 GB, so only these batches' files/ folders are committed; the rest are
@@ -149,7 +152,7 @@ def video_pools(rng):
 
 
 def image_pools():
-    """{"English": [...], "Arabic": [...]} with >= MIN_WRONG of 3 wrong.
+    """{"English": [...], "Arabic": [...]} with >= MIN_WRONG_IMAGES of 3 wrong.
 
     labels.csv: post id, label (EXPLICIT / IMPLICIT / NO_DARK_HUMOUR), language.
     Harmful = EXPLICIT or IMPLICIT. Model files: path, label (harmful /
@@ -166,7 +169,7 @@ def image_pools():
         truth = "harmful" if label in ("EXPLICIT", "IMPLICIT") else "non_harmful"
         wrong = sum(pid in o and o[pid] != truth for o in outputs)
         lang = IMAGE_LANGUAGES[r["language"].strip()]
-        if wrong >= MIN_WRONG:
+        if wrong >= MIN_WRONG_IMAGES:
             pools[lang].append({
                 "item_id": pid,
                 "item": pid,
@@ -193,6 +196,10 @@ def compose_batches(pools):
             take[k] += min(gap, len(left[k]) - take[k])
         batches.append({k: left[k][:n] for k, n in take.items()})
         left = {k: left[k][n:] for k, n in take.items()}
+    if len(batches) > 1 and sum(len(v) for v in batches[-1].values()) < MERGE_BELOW:
+        last = batches.pop()
+        for k in QUOTA:
+            batches[-1][k] += last[k]
     return batches
 
 
@@ -205,8 +212,8 @@ def main():
     vids = video_pools(rng)
     pools[("videos", "English")] = vids["English"]
     pools[("videos", "Arabic")] = vids["Arabic"]
-    # Text and video pools are shuffled exactly as before images existed, so
-    # their batches stay the same; images get their own random generator.
+    # Images get their own random generator, so changes to the image pool
+    # never reshuffle the text and video batches (and vice versa).
     for key in sorted(pools):
         pool = sorted(pools[key], key=lambda x: str(x["item_id"]))
         rng.shuffle(pool)

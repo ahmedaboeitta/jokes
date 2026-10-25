@@ -235,22 +235,55 @@ function mergeAnnotations(local, remote) {
   return merged;
 }
 
-async function loadAnnotators() {
+// The name list is remembered in the browser so the dropdown fills instantly
+// on later visits; the server copy (a few seconds away) then replaces it.
+const ANNOTATORS_CACHE_KEY = "jokes_annotators_v1";
+
+function fillAnnotators(list) {
   const select = $("annotator-select");
+  const chosen = select.value;
+  select.innerHTML = '<option value="">-- select --</option>';
+  for (const a of list) {
+    const opt = document.createElement("option");
+    opt.value = a.id;
+    opt.textContent = a.name;
+    select.appendChild(opt);
+  }
+  if (list.some((a) => a.id === chosen)) select.value = chosen;
+}
+
+async function loadAnnotators() {
+  let cached = null;
+  try {
+    cached = JSON.parse(localStorage.getItem(ANNOTATORS_CACHE_KEY) || "null");
+  } catch (e) { /* ignore a damaged cache */ }
+  if (Array.isArray(cached) && cached.length) fillAnnotators(cached);
+  else $("annotator-select").innerHTML = '<option value="">Loading names…</option>';
   try {
     const res = await api("annotators");
     if (!res.ok) throw new Error(res.error);
-    select.innerHTML = '<option value="">-- select --</option>';
-    for (const a of res.annotators) {
-      const opt = document.createElement("option");
-      opt.value = a.id;
-      opt.textContent = a.name;
-      select.appendChild(opt);
-    }
+    fillAnnotators(res.annotators);
+    try {
+      localStorage.setItem(ANNOTATORS_CACHE_KEY, JSON.stringify(res.annotators));
+    } catch (e) { /* storage full or blocked: the list still works */ }
   } catch (e) {
     console.error("Could not load annotators", e);
-    select.innerHTML = '<option value="">(could not load)</option>';
+    if (cached) return; // keep the remembered list; login will report a server problem
+    $("annotator-select").innerHTML = '<option value="">(could not load)</option>';
     showSetupError("Could not reach the server. Check your internet connection and reload the page.");
+  }
+}
+
+// Shows a "working" label on a button while a slow server call runs.
+async function withBusyButton(btn, label, fn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = label;
+  try {
+    return await fn();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
   }
 }
 
@@ -567,33 +600,31 @@ async function logIn() {
     showSetupError("Please choose your name and enter your password.");
     return;
   }
-  const btn = $("login-btn");
-  btn.disabled = true;
   showSetupError("");
-  try {
-    const res = await api("login", { annotatorId: annotator, password });
-    if (!res.ok) {
-      showSetupError(
-        res.error === "locked"
-          ? "Too many wrong attempts. Please wait 15 minutes and try again."
-          : "Wrong name or password."
-      );
-      return;
+  await withBusyButton($("login-btn"), "Logging in…", async () => {
+    try {
+      const res = await api("login", { annotatorId: annotator, password });
+      if (!res.ok) {
+        showSetupError(
+          res.error === "locked"
+            ? "Too many wrong attempts. Please wait 15 minutes and try again."
+            : "Wrong name or password."
+        );
+        return;
+      }
+      if (res.language !== "english" && res.language !== "arabic") {
+        showSetupError("Your account has no language assigned yet. Please contact the project admin.");
+        return;
+      }
+      state.annotator = annotator;
+      state.password = password;
+      state.language = res.language;
+      showChooseStep(res.displayName);
+    } catch (e) {
+      console.error("Could not log in", e);
+      showSetupError("Could not reach the server. Check your internet connection and try again.");
     }
-    if (res.language !== "english" && res.language !== "arabic") {
-      showSetupError("Your account has no language assigned yet. Please contact the project admin.");
-      return;
-    }
-    state.annotator = annotator;
-    state.password = password;
-    state.language = res.language;
-    showChooseStep(res.displayName);
-  } catch (e) {
-    console.error("Could not log in", e);
-    showSetupError("Could not reach the server. Check your internet connection and try again.");
-  } finally {
-    btn.disabled = false;
-  }
+  });
 }
 
 $("login-btn").addEventListener("click", logIn);
@@ -615,21 +646,19 @@ $("logout-btn").addEventListener("click", () => {
 $("start-btn").addEventListener("click", async () => {
   const batch = $("batch-select").value;
   const datasetKey = $("language-select").value;
-  const btn = $("start-btn");
-  btn.disabled = true;
   showSetupError("");
-  try {
-    await startSession(state.annotator, batch, datasetKey);
-  } catch (e) {
-    console.error("Could not start session", e);
-    showSetupError(
-      e.message === "empty_track"
-        ? "This track has no items in this batch yet."
-        : "Could not load your saved work. Check your internet connection and try again."
-    );
-  } finally {
-    btn.disabled = false;
-  }
+  await withBusyButton($("start-btn"), "Loading your work…", async () => {
+    try {
+      await startSession(state.annotator, batch, datasetKey);
+    } catch (e) {
+      console.error("Could not start session", e);
+      showSetupError(
+        e.message === "empty_track"
+          ? "This track has no items in this batch yet."
+          : "Could not load your saved work. Check your internet connection and try again."
+      );
+    }
+  });
 });
 
 $("prev-btn").addEventListener("click", () => goTo(-1));

@@ -27,6 +27,7 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
   https://docs.google.com/spreadsheets/d/1TfdLguarBB7gGzm-bB280ok5Xs1GoihNrpc5JDfpUaQ
   - `annotators`: `annotator_id | display_name | password | active | language` (language = `english`/`arabic`). Adding a row adds the annotator to the site dropdown, no push needed.
   - `annotations`: append-only; one row per save. The **latest row per (annotator, batch, dataset, item_id) is the current answer**; older rows are history. Includes all schema fields, `time_spent_sec`, and a `raw_json` copy of the entry. Rows are written by the Sheet's own header names (missing columns get appended), so old unused columns just stay empty. Old rows without `item_id` are ignored by load and export.
+  - `latest`: one row per (annotator, batch, dataset, item_id) with the current `raw_json`; `save` overwrites/appends it, and `load` reads only this tab (not the whole history), so starting a track stays fast as `annotations` grows. Created and filled from `annotations` automatically if missing. **After editing or deleting `annotations` rows by hand, run Annotations → Rebuild latest** (or delete the `latest` tab).
   - `log`: logins, bad passwords, lockouts, wrong-language attempts, errors.
   - `progress`: written by `refreshProgress()` (hourly + menu **Annotations → Refresh progress now**). One row per active annotator × released batch × track of their language: `annotator | language | batch | track | done | total | %`. done = items whose latest row has a label; total = rows in the batch CSV fetched from the live site; released batches are parsed from `RELEASED_BATCHES` in the live `app.js`. Tracks with 0 items are left out.
 - **Apps Script** (`apps_script/Code.gs` is the copy of record; it's pasted into the Sheet via Extensions → Apps Script). Deployed as a web app, Execute as: Me, Access: Anyone:
@@ -71,13 +72,13 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
   - Text true label = `Offensive`, taken from the GPT-5 file. The GPT-4o Arabic file has a slightly different copy of row 900 (label 0 vs 1); label 1 is used.
   - Video true label = `Inappropriate` in `labels.csv`.
   - Image true label: `EXPLICIT`/`IMPLICIT` = harmful, `NO_DARK_HUMOUR` = safe. A missing model prediction counts as not wrong.
-- **Pool:** items where at least 2 models were wrong (binary harmful/safe). English text 332, Arabic text 222; videos English 183 + Arabic 180 + Universal 184, with Universal split randomly in half → pools of 275 / 272; images English 933, Arabic 880.
-- **Batches (per language): 400 items = 100 text + 100 videos + 200 images.** When a type runs out, the gap is filled from images (then text, then videos), so every batch is 400 except the last. Every pool item is used once, in random order (seed 42; images use their own seeded generator so the text/video batches didn't change when images were added):
+- **Pool (rule changed 2026-10-25):** text and videos = **at least 1 of 4** models wrong; images = **at least 2 of 3** wrong (binary harmful/safe). English text 554, Arabic text 342; videos English 301 + Arabic 257 + Universal 253, with Universal split randomly in half → pools of 427 / 384; images English 933, Arabic 880. Totals per annotator: English 1,914, Arabic 1,606.
+- **Batches (per language): 400 items = 100 text + 100 videos + 200 images.** When a type runs out, the gap is filled from images (then text, then videos), so every batch is 400 except the last; a last batch under 50 items is merged into the one before (`MERGE_BELOW`). Every pool item is used once, in random order (seed 42; images use their own seeded generator):
 
-  | Language (text/videos/images) | batch_01 | batch_02 | batch_03 | batch_04 |
-  |---|---|---|---|---|
-  | English | 100/100/200 | 100/100/200 | 100/75/225 | 32/0/308 (340) |
-  | Arabic | 100/100/200 | 100/100/200 | 22/72/306 | 0/0/174 (174) |
+  | Language (text/videos/images) | b01 | b02 | b03 | b04 | b05 |
+  |---|---|---|---|---|---|
+  | English | 100/100/200 | 100/100/200 | 100/100/200 | 100/100/200 | 154/27/133 (314) |
+  | Arabic | 100/100/200 | 100/100/200 | 100/100/200 | 42/84/280 (406) | – |
 - **Annotators are language-specific:** each annotator does their language's tracks; all annotators of a language get the same items (for agreement).
 - Tracks a batch doesn't have (pool exhausted) get header-only CSVs, and the site shows "no items yet".
 
@@ -85,7 +86,7 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
 
 Two lists, kept in step:
 - `RELEASED_BATCHES` at the top of `app.js`: the batches annotators can pick (currently `[1]`).
-- `LIVE_MEDIA` at the top of `scripts/make_batches.py`: the batches whose videos/images are committed (currently `[1]`). **GitHub Pages caps the published site at 1 GB** (can't be raised) and all media is ~1.16 GB. Media per batch: batch_01 381 MB, batch_02 332 MB, batch_03 326 MB, batch_04 125 MB, so only 1–2 batches' media can be online at a time.
+- `LIVE_MEDIA` at the top of `scripts/make_batches.py`: the batches whose videos/images are committed (currently `[1]`). **GitHub Pages caps the published site at 1 GB** (can't be raised) and all media is ~1.5 GB. Media per batch: batch_01 356 MB, batch_02 368 MB, batch_03 371 MB, batch_04 313 MB, batch_05 97 MB, so only 1–2 batches' media can be online at a time.
 
 **iCloud gotcha:** the repo lives in iCloud Drive. Re-running `make_batches.py` (which deletes and recreates `batches/`) can leave iCloud conflict copies like `vid1000 2.mp4` or a `files 2/` folder. Before committing, delete anything in a `files/` folder that isn't listed in that batch's CSVs (don't delete by the " 2" pattern: some real image names contain " 2"). iCloud may also offload files ("dataless"), which makes `git add` time out; reading them first (`cat f > /dev/null`) downloads them. Every batch's CSVs stay committed (the progress tab reads them).
 
@@ -122,6 +123,14 @@ One value per item: `timeSpentSec` = total time the item was open on screen,
 summed over every visit (timestamp-based, so browser timer throttling doesn't
 affect it). The clock pauses while the browser tab is hidden. Plus `annotatedAt`. Items only opened (no answers) are saved too,
 with empty fields and their time.
+
+## Speed
+
+Each Apps Script call takes ~2–3 s (Google's start-up overhead, can't be
+removed). The site hides what it can: the annotator list is cached in
+localStorage (`jokes_annotators_v1`) so the dropdown fills instantly and is
+refreshed in the background, and the Log in / Start buttons show
+"Logging in…" / "Loading your work…" while waiting.
 
 ## Sync details
 
