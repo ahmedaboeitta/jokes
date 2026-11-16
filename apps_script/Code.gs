@@ -7,7 +7,7 @@
 // latest row per (annotator, batch, dataset, item) is the current answer,
 // older rows are kept as history.
 //
-// Tabs: annotators (annotator_id | display_name | password | active | language),
+// Tabs: annotators (annotator_id | display_name | password | active | language | batches),
 //       annotations (headers written automatically), log,
 //       latest (one row per item, the current answer; kept up to date by save
 //       so load doesn't have to scan the whole history; created and filled
@@ -16,10 +16,12 @@
 // Requests from the website are POSTs with a text/plain JSON body (avoids a
 // CORS preflight, which Apps Script can't answer). Actions:
 //   annotators                         -> [{id, name}] of active annotators
-//   login  {annotatorId, password}     -> {displayName, language}
+//   login  {annotatorId, password}     -> {displayName, language, batches}
 //
 // Each annotator works in one language (english/arabic, the "language"
-// column); save/load refuse datasets of the other language.
+// column); save/load refuse datasets of the other language. The "batches"
+// column lists the batches they may open (e.g. "1, 2"; blank = DEFAULT_BATCHES);
+// save/load refuse any other batch, and the site only offers those.
 //   save   {annotatorId, password, batch, dataset, entries: [entry, ...]}
 //   load   {annotatorId, password, batch, dataset} -> {entries: [latest per item]}
 //
@@ -35,9 +37,12 @@ const ROOT_FOLDER_ID = "1ZW0XqFmVcg7jYZPDkr92MRdZanhns2lD"; // "jokes annotation
 const OUTPUT_FOLDER = "Annotations";
 const NIGHTLY_HOUR = 2; // runs between 2 and 3 am, script time zone
 
-// The public site: released batches are read from its app.js and item counts
-// from its batch CSVs, so the progress tab never needs editing by hand.
+// The public site: item counts are read from its batch CSVs, so the progress
+// tab never needs editing by hand.
 const SITE_URL = "https://ahmedaboeitta.github.io/jokes/";
+
+// Batches an annotator gets when their "batches" cell is blank.
+const DEFAULT_BATCHES = [1];
 
 // Website dataset key -> language it belongs to.
 const DATASET_LANGUAGE = {
@@ -131,7 +136,16 @@ function annotatorRows() {
       password: String(r[2]),
       active: r[3] === true || String(r[3]).trim().toUpperCase() === "TRUE",
       language: String(r[4] || "").trim().toLowerCase(),
+      batches: parseBatches(r[5]),
     }));
+}
+
+// "1, 2" (or 1, "1 2", "1;2") -> ["batch_01", "batch_02"]; blank -> DEFAULT_BATCHES.
+function parseBatches(cell) {
+  const nums = String(cell === null || cell === undefined ? "" : cell)
+    .split(/[^0-9]+/).filter(Boolean).map(Number);
+  return (nums.length ? nums : DEFAULT_BATCHES)
+    .map((n) => "batch_" + ("0" + n).slice(-2));
 }
 
 // Returns the annotator record, or an error reply object.
@@ -158,7 +172,19 @@ function login(req) {
   const auth = authenticate(req);
   if (auth.error) return auth.error;
   log("login", auth.annotator.id, "");
-  return { ok: true, displayName: auth.annotator.name, language: auth.annotator.language };
+  return {
+    ok: true,
+    displayName: auth.annotator.name,
+    language: auth.annotator.language,
+    batches: auth.annotator.batches,
+  };
+}
+
+// Returns an error reply if the annotator may not open this batch.
+function checkBatch(annotator, batch) {
+  if (annotator.batches.indexOf(String(batch)) !== -1) return null;
+  log("batch_not_allowed", annotator.id, String(batch));
+  return { ok: false, error: "batch_not_allowed" };
 }
 
 // Returns an error reply if the dataset isn't in the annotator's language.
@@ -174,7 +200,7 @@ function checkLanguage(annotator, dataset) {
 function save(req) {
   const auth = authenticate(req);
   if (auth.error) return auth.error;
-  const langError = checkLanguage(auth.annotator, req.dataset);
+  const langError = checkLanguage(auth.annotator, req.dataset) || checkBatch(auth.annotator, req.batch);
   if (langError) return langError;
   const entries = Array.isArray(req.entries) ? req.entries : [];
   if (!entries.length) return { ok: true, saved: 0 };
@@ -206,7 +232,7 @@ function save(req) {
 function load(req) {
   const auth = authenticate(req);
   if (auth.error) return auth.error;
-  const langError = checkLanguage(auth.annotator, req.dataset);
+  const langError = checkLanguage(auth.annotator, req.dataset) || checkBatch(auth.annotator, req.batch);
   if (langError) return langError;
   const sh = latestSheet();
   if (sh.getLastRow() < 2) return { ok: true, entries: [] };
@@ -431,7 +457,7 @@ function batchItemIds(batch, dataset, cache) {
 }
 
 // --- progress tab ---
-// One row per active annotator x released batch x track of their language
+// One row per active annotator x each of their batches x track of their language
 // (tracks with no items yet are left out): done = items with a label,
 // total = items in that batch's CSV on the site.
 
@@ -441,7 +467,8 @@ function refreshProgressFromMenu() {
 }
 
 function refreshProgress() {
-  const batches = releasedBatches();
+  const annotators = annotatorRows().filter((a) => a.active);
+  const batches = [...new Set([].concat(...annotators.map((a) => a.batches)))].sort();
 
   // Items in each released batch/track.
   const idCache = {};
@@ -478,9 +505,8 @@ function refreshProgress() {
   }
 
   const out = [["annotator", "language", "batch", "track", "done", "total", "%"]];
-  for (const a of annotatorRows()) {
-    if (!a.active) continue;
-    for (const batch of batches) {
+  for (const a of annotators) {
+    for (const batch of a.batches) {
       for (const dataset of Object.keys(DATASET_FILES)) {
         if (DATASET_LANGUAGE[dataset] !== a.language) continue;
         const total = totals[batch + "|" + dataset];
@@ -500,15 +526,6 @@ function refreshProgress() {
   sh.setFrozenRows(1);
   sh.getRange(1, 9, 1, 2).setValues([["last refreshed", new Date()]]);
   return out.length - 1;
-}
-
-// Batch folder names from RELEASED_BATCHES in the site's app.js.
-function releasedBatches() {
-  const js = UrlFetchApp.fetch(SITE_URL + "app.js").getContentText();
-  const m = js.match(/RELEASED_BATCHES\s*=\s*\[([^\]]*)\]/);
-  if (!m) throw new Error("RELEASED_BATCHES not found in app.js");
-  return m[1].split(",").map((x) => x.trim()).filter(Boolean)
-    .map((n) => "batch_" + ("0" + Number(n)).slice(-2));
 }
 
 // --- helpers ---

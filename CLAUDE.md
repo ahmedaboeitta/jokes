@@ -25,14 +25,14 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
 
 - **Google Sheet "Annotations DB"** (private, owner only):
   https://docs.google.com/spreadsheets/d/1TfdLguarBB7gGzm-bB280ok5Xs1GoihNrpc5JDfpUaQ
-  - `annotators`: `annotator_id | display_name | password | active | language` (language = `english`/`arabic`). Adding a row adds the annotator to the site dropdown, no push needed.
+  - `annotators`: `annotator_id | display_name | password | active | language | batches` (language = `english`/`arabic`; batches = the batches that person may open, e.g. `1, 2`, blank = `DEFAULT_BATCHES` in Code.gs = batch 1). Adding a row adds the annotator to the site dropdown, and editing `batches` grants/removes a batch; no push needed. Type batch lists with a space (`1, 2`) so Sheets keeps them as text.
   - `annotations`: append-only; one row per save. The **latest row per (annotator, batch, dataset, item_id) is the current answer**; older rows are history. Includes all schema fields, `time_spent_sec`, and a `raw_json` copy of the entry. Rows are written by the Sheet's own header names (missing columns get appended), so old unused columns just stay empty. Old rows without `item_id` are ignored by load and export.
   - `latest`: one row per (annotator, batch, dataset, item_id) with the current `raw_json`; `save` overwrites/appends it, and `load` reads only this tab (not the whole history), so starting a track stays fast as `annotations` grows. Created and filled from `annotations` automatically if missing. **After editing or deleting `annotations` rows by hand, run Annotations → Rebuild latest** (or delete the `latest` tab).
   - `log`: logins, bad passwords, lockouts, wrong-language attempts, errors.
-  - `progress`: written by `refreshProgress()` (hourly + menu **Annotations → Refresh progress now**). One row per active annotator × released batch × track of their language: `annotator | language | batch | track | done | total | %`. done = items whose latest row has a label; total = rows in the batch CSV fetched from the live site; released batches are parsed from `RELEASED_BATCHES` in the live `app.js`. Tracks with 0 items are left out.
+  - `progress`: written by `refreshProgress()` (hourly + menu **Annotations → Refresh progress now**). One row per active annotator × each of their batches (`batches` column) × track of their language: `annotator | language | batch | track | done | total | %`. done = items whose latest row has a label; total = rows in the batch CSV fetched from the live site. Tracks with 0 items are left out.
 - **Apps Script** (`apps_script/Code.gs` is the copy of record; it's pasted into the Sheet via Extensions → Apps Script). Deployed as a web app, Execute as: Me, Access: Anyone:
   https://script.google.com/macros/s/AKfycbyT7qIUSRt-SQX0Hbow3rRw99cymZJR3vmE7XqODja8Xodzewn8pAvihmomfOp72EAk1w/exec
-  - Actions: `annotators`, `login`, `save`, `load`. The password is checked on **every** request (the URL is public in `app.js`). 10 wrong attempts lock the account for 15 minutes. Save/load refuse datasets outside the annotator's language.
+  - Actions: `annotators`, `login` (returns the person's `batches`; the site's batch dropdown is filled from it), `save`, `load`. The password is checked on **every** request (the URL is public in `app.js`). 10 wrong attempts lock the account for 15 minutes. Save/load refuse datasets outside the annotator's language and batches not in their `batches` cell (logged as `batch_not_allowed`).
   - **Updating the script without changing the URL:** Deploy → Manage deployments → Edit → Version: New version. ("New deployment" creates a new URL.)
   - Requests are POSTs with a text/plain body to avoid a CORS preflight.
 - **Drive export:** `buildFolders()` writes
@@ -84,13 +84,13 @@ GitHub Pages site (public)  →  Apps Script web app  →  Google Sheet + Drive 
 
 ## Releasing batches
 
-Two lists, kept in step:
-- `RELEASED_BATCHES` at the top of `app.js`: the batches annotators can pick (currently `[1]`).
-- `LIVE_MEDIA` at the top of `scripts/make_batches.py`: the batches whose videos/images are committed (currently `[1]`). **GitHub Pages caps the published site at 1 GB** (can't be raised) and all media is ~1.5 GB. Media per batch: batch_01 356 MB, batch_02 368 MB, batch_03 371 MB, batch_04 313 MB, batch_05 97 MB, so only 1–2 batches' media can be online at a time.
+Two separate things:
+- **Who can open a batch:** the `batches` column of the Sheet's `annotators` tab (per person; no push). The site falls back to `DEFAULT_BATCHES` in `app.js` (batch 1) if the server sends no list.
+- **Whose media is online:** `LIVE_MEDIA` at the top of `scripts/make_batches.py` (currently `[1, 2]`); the media of other batches is git-ignored via the generated `batches/.gitignore`. **GitHub Pages caps the published site at 1 GB** (can't be raised) and all media is ~1.5 GB. Media per batch: batch_01 356 MB, batch_02 368 MB, batch_03 371 MB, batch_04 313 MB, batch_05 97 MB, so only 1–2 batches' media can be online at a time. A batch must be in `LIVE_MEDIA` before anyone is given it.
 
 **iCloud gotcha:** the repo lives in iCloud Drive. Re-running `make_batches.py` (which deletes and recreates `batches/`) can leave iCloud conflict copies like `vid1000 2.mp4` or a `files 2/` folder. Before committing, delete anything in a `files/` folder that isn't listed in that batch's CSVs (don't delete by the " 2" pattern: some real image names contain " 2"). iCloud may also offload files ("dataless"), which makes `git add` time out; reading them first (`cat f > /dev/null`) downloads them. Every batch's CSVs stay committed (the progress tab reads them).
 
-Releasing the next batch (intended: every two weeks): add it to both lists, re-run `python3 scripts/make_batches.py`, commit, push. Swapping out a finished batch: remove it from `LIVE_MEDIA` (and `RELEASED_BATCHES`) only once every annotator has finished it (check the `progress` tab); answers in the Sheet are unaffected.
+Releasing the next batch: add it to `LIVE_MEDIA`, update `batches/.gitignore` (re-run `python3 scripts/make_batches.py`, or just delete that batch's line since the files already exist locally and the script is seeded), commit, push; then add the number to the chosen annotators' `batches` cells. Batch 2 went live 2026-11-16 this way. Swapping out a finished batch: remove it from `LIVE_MEDIA` only once every annotator has finished it (check the `progress` tab) and from everyone's `batches`; answers in the Sheet are unaffected.
 
 ## Dataset tracks
 
@@ -161,6 +161,6 @@ screen itself is English only.
 
 ## Known open items
 
-- Real annotators added 2026-10-25: English `salisu`, `arslan`, `ansuman`; Arabic `amina`, `taher`, `zohra`, `khayra` (logins in `private/annotators.tsv`).
+- Real annotators added 2026-10-25: English `salisu`, `arslan`, `ansuman` (+ `yasser`, added later); Arabic `amina`, `taher`, `zohra`, `khayra` (logins in `private/annotators.tsv`).
 - `hesham` (English) and `heshamm` (Arabic) are test annotators, kept on purpose for further testing, along with hesham's test rows in the Sheet.
 - Once, a `load` was rejected as bad_credentials right after a successful login; not reproduced since.

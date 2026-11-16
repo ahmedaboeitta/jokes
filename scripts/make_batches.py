@@ -47,7 +47,7 @@ MIN_WRONG_IMAGES = 2
 # listed in batches/.gitignore. The small CSVs of every batch are always
 # committed (the Sheet's progress tab reads them). To swap batches: edit this
 # list, re-run the script, commit, push.
-LIVE_MEDIA = [1]
+LIVE_MEDIA = [1, 2]
 
 SRC = "source_data"
 OUT = "batches"

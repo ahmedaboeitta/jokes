@@ -9,13 +9,10 @@
 const API_URL =
   "https://script.google.com/macros/s/AKfycbyT7qIUSRt-SQX0Hbow3rRw99cymZJR3vmE7XqODja8Xodzewn8pAvihmomfOp72EAk1w/exec";
 
-// Batches annotators can pick. All batches are prepared in batches/ up front;
-// releasing the next one is just adding its number here and pushing.
-const RELEASED_BATCHES = [1];
-
-function batchFolder(n) {
-  return `batch_${String(n).padStart(2, "0")}`;
-}
+// Which batches each annotator may pick comes from the server at login (the
+// "batches" column of the Sheet's annotators tab). Used only if the server
+// doesn't send a list.
+const DEFAULT_BATCHES = ["batch_01"];
 
 // Each dataset knows: where its CSV lives (relative to the batch folder),
 // whether items are jokes (text), images or videos, which CSV column holds
@@ -573,13 +570,6 @@ function sanitize(name) {
 
 // --- wiring ---
 
-for (const n of RELEASED_BATCHES) {
-  const opt = document.createElement("option");
-  opt.value = batchFolder(n);
-  opt.textContent = `Batch ${n}`;
-  $("batch-select").appendChild(opt);
-}
-
 loadAnnotators();
 
 // The setup screen has two steps: log in, then pick batch + dataset. Only the
@@ -604,6 +594,18 @@ function showChooseStep(displayName) {
   $("welcome-text").textContent = `Logged in as ${displayName}`;
   $("login-step").classList.add("hidden");
   $("choose-step").classList.remove("hidden");
+}
+
+// Batch folder names like "batch_02" -> dropdown entries "Batch 2".
+function fillBatches(batches) {
+  const select = $("batch-select");
+  select.innerHTML = "";
+  for (const b of batches) {
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = `Batch ${Number(b.replace("batch_", ""))}`;
+    select.appendChild(opt);
+  }
 }
 
 async function logIn() {
@@ -632,6 +634,7 @@ async function logIn() {
       state.annotator = annotator;
       state.password = password;
       state.language = res.language;
+      fillBatches(Array.isArray(res.batches) && res.batches.length ? res.batches : DEFAULT_BATCHES);
       showChooseStep(res.displayName);
     } catch (e) {
       console.error("Could not log in", e);
