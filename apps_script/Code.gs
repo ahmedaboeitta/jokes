@@ -365,10 +365,14 @@ function buildFolders() {
   const out = getOrCreateFolder(DriveApp.getFolderById(ROOT_FOLDER_ID), OUTPUT_FOLDER);
   const languageOf = {};
   for (const a of annotatorRows()) languageOf[a.id] = a.language;
+  const idCache = {};
   let written = 0;
   for (const g of Object.keys(groups)) {
     const [annotator, batch, dataset] = g.split("|");
-    const items = Object.values(groups[g]).sort((a, b) => Number(a[cIndex]) - Number(b[cIndex]));
+    const ids = batchItemIds(batch, dataset, idCache);
+    const items = Object.values(groups[g])
+      .filter((r) => !ids || ids.has(String(r[cItem])))
+      .sort((a, b) => Number(a[cIndex]) - Number(b[cIndex]));
     const lines = [outCols.map((i) => header[i])]
       .concat(items.map((r) => outCols.map((i) => r[i])))
       .map((line) => line.map(csvField).join(","));
@@ -408,6 +412,24 @@ function csvField(v) {
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
+// Item IDs in a batch's CSV on the live site (first column), cached per run.
+// Answers for items not in that list (saved under the wrong track by an old
+// site bug) are left out of the export and the progress counts. null when the
+// CSV can't be fetched, meaning "don't filter".
+function batchItemIds(batch, dataset, cache) {
+  const key = batch + "|" + dataset;
+  if (key in cache) return cache[key];
+  cache[key] = null;
+  const file = DATASET_FILES[dataset];
+  if (!file) return null;
+  const res = UrlFetchApp.fetch(SITE_URL + "batches/" + batch + "/" + file, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return null;
+  const rows = Utilities.parseCsv(res.getContentText("UTF-8"))
+    .filter((r) => r.some((c) => String(c).trim()));
+  cache[key] = new Set(rows.slice(1).map((r) => String(r[0])));
+  return cache[key];
+}
+
 // --- progress tab ---
 // One row per active annotator x released batch x track of their language
 // (tracks with no items yet are left out): done = items with a label,
@@ -422,15 +444,12 @@ function refreshProgress() {
   const batches = releasedBatches();
 
   // Items in each released batch/track.
+  const idCache = {};
   const totals = {};
   for (const batch of batches) {
     for (const dataset of Object.keys(DATASET_FILES)) {
-      const url = SITE_URL + "batches/" + batch + "/" + DATASET_FILES[dataset];
-      const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-      if (res.getResponseCode() !== 200) continue;
-      const rows = Utilities.parseCsv(res.getContentText("UTF-8"))
-        .filter((r) => r.some((c) => String(c).trim()));
-      totals[batch + "|" + dataset] = Math.max(rows.length - 1, 0);
+      const ids = batchItemIds(batch, dataset, idCache);
+      if (ids) totals[batch + "|" + dataset] = ids.size;
     }
   }
 
@@ -447,10 +466,14 @@ function refreshProgress() {
       latest[[r[cId], r[cBatch], r[cDataset], r[cItem]].join("|")] = String(r[cLabel]).trim() !== "";
     }
   }
+  // Only items that are in that batch/track's CSV count (see batchItemIds).
   const done = {};
   for (const k of Object.keys(latest)) {
     if (!latest[k]) continue;
-    const g = k.split("|").slice(0, 3).join("|");
+    const [id, batch, dataset, item] = k.split("|");
+    const ids = idCache[batch + "|" + dataset];
+    if (!ids || !ids.has(item)) continue;
+    const g = [id, batch, dataset].join("|");
     done[g] = (done[g] || 0) + 1;
   }
 

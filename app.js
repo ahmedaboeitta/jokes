@@ -154,6 +154,13 @@ const RETRY_MS = 15000;
 let syncTimer = null;
 let syncing = false;
 
+// Unsent entries of the open track. Only items in the track's list are sent,
+// so an answer can never be filed under another track.
+function dirtyEntries() {
+  const ids = new Set(state.jokes.map((j) => j.id));
+  return Object.values(state.annotations).filter((a) => a && a._dirty && ids.has(a.itemId));
+}
+
 function scheduleSync(delay = SYNC_DELAY_MS) {
   if (delay === SYNC_DELAY_MS) setSyncStatus("saving");
   clearTimeout(syncTimer);
@@ -162,7 +169,7 @@ function scheduleSync(delay = SYNC_DELAY_MS) {
 
 async function syncNow() {
   if (syncing || !state.password) return;
-  const dirty = Object.values(state.annotations).filter((a) => a && a._dirty);
+  const dirty = dirtyEntries();
   if (!dirty.length) return setSyncStatus("saved");
   const sent = dirty.map((a) => ({ id: a.itemId, rev: a._rev }));
   const ctx = { batch: state.batch, dataset: state.datasetKey };
@@ -181,7 +188,7 @@ async function syncNow() {
       persistAnnotations();
     }
     syncing = false;
-    const stillDirty = Object.values(state.annotations).some((a) => a && a._dirty);
+    const stillDirty = dirtyEntries().length > 0;
     if (stillDirty) scheduleSync(); else setSyncStatus("saved");
   } catch (e) {
     console.error("Sync failed", e);
@@ -196,7 +203,7 @@ async function syncNow() {
 // latest row per item, so a duplicate is harmless).
 function beaconSync() {
   if (!state.password || !navigator.sendBeacon) return;
-  const dirty = Object.values(state.annotations).filter((a) => a && a._dirty);
+  const dirty = dirtyEntries();
   if (!dirty.length) return;
   const body = JSON.stringify({
     action: "save", ...credentials(),
@@ -307,6 +314,12 @@ function fetchCSV(path) {
 async function startSession(annotator, batch, datasetKey) {
   const dataset = DATASETS[datasetKey];
   const base = `batches/${batch}/`;
+  // Drop the previous track before switching: a save still waiting for it
+  // would otherwise go out under this track's name while this one loads.
+  // Its unsent answers stay in this browser and go out when it's reopened.
+  clearTimeout(syncTimer);
+  state.annotations = {};
+  state.jokes = [];
   state.annotator = annotator;
   state.batch = batch;
   state.datasetKey = datasetKey;

@@ -140,6 +140,12 @@ different item. localStorage key: `jokes_annotations_v3__<batch>__<dataset>__<an
 The **Sync now** button in the top bar marks every entry of the open track
 dirty and re-sends them all.
 
+Only entries for items in the open track's list are ever sent, and starting a
+track first drops the previous track's pending save. (Before 2026-11-16 a quick
+track switch could file the last answer under the new track; those stray rows
+are still in the Sheet. `refreshProgress()` and `buildFolders()` ignore any
+answer whose item isn't in that batch/track's CSV, via `batchItemIds()`.)
+
 Entries carry local-only `_rev`/`_dirty` fields (stripped before sending).
 Saves are debounced (2s) and retried every 15s on failure; `sendBeacon` on
 tab hide/close. On session start, local and server copies are merged per
