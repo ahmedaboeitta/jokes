@@ -668,10 +668,14 @@ $("start-btn").addEventListener("click", async () => {
       await startSession(state.annotator, batch, datasetKey);
     } catch (e) {
       console.error("Could not start session", e);
+      const messages = {
+        empty_track: "This track has no items in this batch yet.",
+        batch_not_allowed: "You don't have access to this batch.",
+        wrong_language: "You don't have access to this track.",
+      };
       showSetupError(
-        e.message === "empty_track"
-          ? "This track has no items in this batch yet."
-          : "Could not load your saved work. Check your internet connection and try again."
+        messages[e.message] ||
+          "Could not load your saved work. Check your internet connection and try again."
       );
     }
   });
